@@ -27,6 +27,7 @@ pub const ARG_HEADERS: &'static str = "headers";
 pub const ARG_NO_HEADERS: &'static str = "no-headers";
 pub const ARG_GET: &'static str = "get";
 pub const ARG_SET: &'static str = "set";
+pub const ARG_JSON_BATCH: &'static str = "json-batch";
 
 pub fn parse_args(args: &Vec<String>) -> ArgMatches {
     let arg_servers = Arg::with_name(ARG_BOOTSTRAP_SERVER)
@@ -150,6 +151,9 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .conflicts_with(ARG_GET)
         .requires_all(&[ARG_TOPIC]);
 
+    let arg_json_batch = Arg::with_name(ARG_JSON_BATCH)
+        .long(ARG_JSON_BATCH);
+
     return App::new("Kafka tool")
         .version(crate_version!())
         .setting(AppSettings::GlobalVersion)
@@ -206,7 +210,9 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_headers)
             .arg(&arg_key)
             .arg(&arg_key_file)
-            .arg(&arg_payload_file))
+            .arg(&arg_payload_file)
+            .arg(&arg_json_batch.clone()
+                .help("Treat the content of the payload file as a batch of serialized JSON messages")))
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches_from(args);
 }

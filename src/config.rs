@@ -1,6 +1,6 @@
 use clap::ArgMatches;
 
-use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
+use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -195,6 +195,7 @@ pub struct ProduceConfig {
     pub key_file: Option<String>,
     pub payload_file: Option<String>,
     pub headers: Vec<(String, String)>,
+    pub json_batch: bool,
 }
 
 impl ProduceConfig {
@@ -211,6 +212,8 @@ impl ProduceConfig {
             values.for_each(|hs|
                 headers.push(split_name_value_pair("header", hs))));
 
+        let json_batch = matches.is_present(ARG_JSON_BATCH);
+
         Self {
             base,
             topic,
@@ -218,6 +221,7 @@ impl ProduceConfig {
             key_file,
             payload_file,
             headers,
+            json_batch,
         }
     }
 }

@@ -22,7 +22,7 @@ use rdkafka::metadata::MetadataTopic;
 use rdkafka::producer::{BaseProducer, BaseRecord, ProducerContext};
 use rdkafka::topic_partition_list::Offset::Offset;
 use rdkafka::types::RDKafkaType;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::args::{CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_PRODUCE, CMD_TOPICS};
@@ -125,13 +125,13 @@ impl Offsets {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 enum TimestampType {
     CreateTime,
     LogAppendTime,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Timestamp {
     #[serde(rename = "type")]
     timestamp_type: TimestampType,
@@ -156,7 +156,7 @@ impl Timestamp {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Header<'a> {
     key: &'a str,
     value: Cow<'a, str>,
@@ -168,7 +168,7 @@ impl<'a> Header<'a> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct ConsumedMessage<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     timestamp: Option<Timestamp>,
@@ -176,7 +176,7 @@ struct ConsumedMessage<'a> {
     key: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     payload: Option<Cow<'a, str>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", borrow)]
     headers: Option<Vec<Header<'a>>>,
 }
 
@@ -529,17 +529,45 @@ fn cmd_produce(matches: &ArgMatches) {
     let producer = create_producer(&config.base);
     let payload = &config.payload_file.as_ref().map(|f| read_to_string(f).unwrap());
     let mut headers = OwnedHeaders::new();
+    let json_batch = config.json_batch;
 
-    for header in config.headers.iter() {
-        headers = headers.add(&(*header).0.to_string(), &(*header).1.to_string());
+    if json_batch && payload.is_some() {
+        let messages: Vec<ConsumedMessage> = serde_json::from_str(payload.as_ref().unwrap().as_str()).unwrap();
+
+        for message in messages.iter() {
+            let msg_payload = message.payload.as_ref().map(|s| s.to_string());
+            let msg_headers = message.headers.as_ref().unwrap();
+            let msg_key = message.key.as_ref().map(|s| s.as_bytes().to_owned());
+
+            for header in msg_headers {
+                headers = headers.add(header.key, &header.value.to_string());
+            }
+
+            send_message(&config, &producer, &msg_payload, &msg_key, &headers);
+        }
+    } else {
+        for header in config.headers.iter() {
+            headers = headers.add(&(*header).0.to_string(), &(*header).1.to_string());
+        }
+
+        let key = get_key(&config);
+        send_message(&config, &producer, payload, &key, &headers);
     }
 
-    let key = get_key(&config);
+    producer.flush(Duration::new(30, 0));
+}
+
+fn send_message(config: &ProduceConfig,
+                producer: &BaseProducer<KeyContext>,
+                payload: &Option<String>,
+                key: &Option<Vec<u8>>,
+                headers: &OwnedHeaders) {
     let delivery_opaque = Box::from(key.clone());
-    let mut record = BaseRecord::<Vec<u8>, String, Box<Option<Vec<u8>>>>::with_opaque_to(&config.topic, delivery_opaque).headers(headers);
+    let mut record = BaseRecord::<Vec<u8>, String, Box<Option<Vec<u8>>>>::with_opaque_to(
+        &config.topic, delivery_opaque).headers(headers.clone());
 
     if key.is_some() {
-        record = record.key(&key.as_ref().unwrap());
+        record = record.key(key.as_ref().unwrap());
     }
 
     if payload.is_some() {
@@ -550,8 +578,6 @@ fn cmd_produce(matches: &ArgMatches) {
         Err(e) => panic!("{:?}", e),
         _ => ()
     }
-
-    producer.flush(Duration::new(30, 0));
 }
 
 fn get_key(config: &ProduceConfig) -> Option<Vec<u8>> {
