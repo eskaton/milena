@@ -157,13 +157,13 @@ impl Timestamp {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Header<'a> {
-    key: &'a str,
-    value: Cow<'a, str>,
+struct Header {
+    key: String,
+    value: String,
 }
 
-impl<'a> Header<'a> {
-    fn new(key: &'a str, value: Cow<'a, str>) -> Header<'a> {
+impl Header {
+    fn new(key: String, value: String) -> Header {
         Self { key, value }
     }
 }
@@ -176,12 +176,12 @@ struct ConsumedMessage<'a> {
     key: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     payload: Option<Cow<'a, str>>,
-    #[serde(skip_serializing_if = "Option::is_none", borrow)]
-    headers: Option<Vec<Header<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    headers: Option<Vec<Header>>,
 }
 
 impl<'a> ConsumedMessage<'a> {
-    fn new(timestamp: Option<Timestamp>, key: Option<Cow<'a, str>>, payload: Option<Cow<'a, str>>, headers: Option<Vec<Header<'a>>>) -> ConsumedMessage<'a> {
+    fn new(timestamp: Option<Timestamp>, key: Option<Cow<'a, str>>, payload: Option<Cow<'a, str>>, headers: Option<Vec<Header>>) -> ConsumedMessage<'a> {
         Self { key, timestamp, payload, headers }
     }
 }
@@ -413,8 +413,10 @@ fn cmd_consume(matches: &ArgMatches) {
     let consumer_group = Option::from(config.consumer_group.clone());
     let consumer: BaseConsumer = create_consumer(&config.base, consumer_group);
     let count = config.count.unwrap_or(0);
+    let json_batch = config.json_batch;
     let mut current_count = 0;
     let topic_partition = get_topic_partitions(&consumer, &config);
+    let mut messages = Vec::<ConsumedMessage>::new();
 
     match consumer.assign(&topic_partition) {
         Err(e) => panic!("Failed to assign partitions: {}", e),
@@ -432,11 +434,26 @@ fn cmd_consume(matches: &ArgMatches) {
         }
 
         match consumer.poll(timeout) {
-            Some(result) => handle_fetch_result(&config, result),
-            None => return
+            Some(result) => {
+                let message = handle_fetch_result(&config, &result);
+
+                if json_batch {
+                    let key = message.key.map(|s| Cow::from(Cow::into_owned(s)));
+                    let payload = message.payload.map(|s| Cow::from(Cow::into_owned(s)));
+
+                    messages.push(ConsumedMessage::new(message.timestamp, key, payload, message.headers));
+                } else {
+                    println!("{}", json!(message).to_string());
+                }
+            }
+            None => break
         }
 
         current_count = current_count + 1;
+    }
+
+    if json_batch {
+        println!("{}", json!(messages));
     }
 }
 
@@ -488,12 +505,12 @@ fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> (i
     (low, high)
 }
 
-fn handle_fetch_result(config: &ConsumeConfig, result: KafkaResult<BorrowedMessage>) {
-    if result.is_err() {
-        panic!("Poll failed with error: {}", result.err().unwrap())
+fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> ConsumedMessage<'a> {
+    if result.as_ref().is_err() {
+        panic!("Poll failed with error: {}", result.as_ref().err().unwrap())
     }
 
-    let message = result.unwrap();
+    let message = result.as_ref().unwrap();
     let headers = match config.no_headers {
         true => None,
         false => message.headers().map(|h| get_headers(h))
@@ -504,9 +521,8 @@ fn handle_fetch_result(config: &ConsumeConfig, result: KafkaResult<BorrowedMessa
     };
     let key = message.key().map(|k| String::from_utf8_lossy(k));
     let payload = message.payload().map(|p| String::from_utf8_lossy(p));
-    let print_message = ConsumedMessage::new(timestamp, key, payload, headers);
 
-    println!("{}", json!(print_message).to_string());
+    ConsumedMessage::new(timestamp, key, payload, headers)
 }
 
 fn get_headers(borrowed_headers: &BorrowedHeaders) -> Vec<Header> {
@@ -521,17 +537,17 @@ fn get_headers(borrowed_headers: &BorrowedHeaders) -> Vec<Header> {
 }
 
 fn get_header(borrowed_headers: &BorrowedHeaders, idx: usize) -> Option<Header> {
-    borrowed_headers.get(idx).map(|h| Header::new(h.0, String::from_utf8_lossy(h.1)))
+    borrowed_headers.get(idx).map(|h| Header::new(h.0.to_string(), String::from_utf8_lossy(h.1).to_string()))
 }
 
 fn cmd_produce(matches: &ArgMatches) {
     let config = ProduceConfig::new(matches);
     let producer = create_producer(&config.base);
     let payload = &config.payload_file.as_ref().map(|f| read_to_string(f).unwrap());
-    let mut headers = OwnedHeaders::new();
     let json_batch = config.json_batch;
 
     if json_batch && payload.is_some() {
+        let mut headers = OwnedHeaders::new();
         let messages: Vec<ConsumedMessage> = serde_json::from_str(payload.as_ref().unwrap().as_str()).unwrap();
 
         for message in messages.iter() {
@@ -540,12 +556,14 @@ fn cmd_produce(matches: &ArgMatches) {
             let msg_key = message.key.as_ref().map(|s| s.as_bytes().to_owned());
 
             for header in msg_headers {
-                headers = headers.add(header.key, &header.value.to_string());
+                headers = headers.add(header.key.as_str(), &header.value.to_string());
             }
 
             send_message(&config, &producer, &msg_payload, &msg_key, &headers);
         }
     } else {
+        let mut headers = OwnedHeaders::new();
+
         for header in config.headers.iter() {
             headers = headers.add(&(*header).0.to_string(), &(*header).1.to_string());
         }

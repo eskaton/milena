@@ -109,6 +109,7 @@ pub struct ConsumeConfig {
     pub no_headers: bool,
     pub tail: Option<i64>,
     pub count: Option<usize>,
+    pub json_batch: bool,
 }
 
 impl ConsumeConfig {
@@ -133,6 +134,7 @@ impl ConsumeConfig {
             true => Some(matches.value_of(ARG_COUNT).map(|s| parse_count(&s.to_string())).unwrap()),
             false => None
         };
+        let json_batch = matches.is_present(ARG_JSON_BATCH);
 
         assert!(count.unwrap_or(1) > 0, "count must be > 0");
 
@@ -169,6 +171,7 @@ impl ConsumeConfig {
             no_headers,
             tail,
             count,
+            json_batch,
         }
     }
 }
