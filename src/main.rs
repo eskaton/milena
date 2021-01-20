@@ -12,10 +12,11 @@ use clap::ArgMatches;
 use futures::executor;
 use num_integer::div_mod_floor;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
-use rdkafka::admin::{AdminClient, AdminOptions, AlterConfig, ConfigResource, OwnedResourceSpecifier, ResourceSpecifier};
+use rdkafka::admin::{AdminClient, AdminOptions, AlterConfig, ConfigResource, NewPartitions, NewTopic, OwnedResourceSpecifier, ResourceSpecifier};
+use rdkafka::admin::TopicReplication::Fixed;
 use rdkafka::client::{Client, DefaultClientContext};
 use rdkafka::consumer::{BaseConsumer, Consumer};
-use rdkafka::error::{KafkaResult, RDKafkaError};
+use rdkafka::error::{KafkaError, KafkaResult, RDKafkaError};
 use rdkafka::message::{BorrowedHeaders, BorrowedMessage, DeliveryResult, Headers, Message, OwnedHeaders};
 use rdkafka::message::Timestamp::CreateTime;
 use rdkafka::metadata::MetadataTopic;
@@ -353,14 +354,74 @@ fn cmd_brokers(matches: &ArgMatches) {
 
 fn cmd_topics(matches: &ArgMatches) {
     let config = TopicConfig::new(matches);
+
+    match config.mode {
+        TopicMode::ALTER => alter_topic(&config),
+        TopicMode::CREATE => create_topic(&config),
+        TopicMode::DELETE => delete_topic(&config),
+        _ => show_topics(&config)
+    };
+}
+
+fn create_topic(config: &TopicConfig) {
+    let client = create_admin_client(&config.base);
+    let topic = config.topic.as_ref().unwrap();
+    let new_topic = NewTopic::new(topic, 1, Fixed(1));
+    let options = AdminOptions::new();
+    let result = executor::block_on(client.create_topics(&[new_topic], &options));
+
+    evaluate_topic_result(topic, result, "created", "create")
+}
+
+fn delete_topic(config: &TopicConfig) {
+    let client = create_admin_client(&config.base);
+    let topic = config.topic.as_ref().unwrap();
+    let options = AdminOptions::new();
+    let result = executor::block_on(client.delete_topics(&[topic], &options));
+
+    evaluate_topic_result(topic, result, "deleted", "delete")
+}
+
+fn alter_topic(config: &TopicConfig) {
+    let client = create_admin_client(&config.base);
+    let topic = config.topic.as_ref().unwrap();
+    let options = AdminOptions::new();
+
+    if config.partitions.is_some() {
+        let partitions = config.partitions.unwrap();
+        let new_partitions = NewPartitions::new(topic.as_str(), partitions as usize);
+        let result = executor::block_on(client.create_partitions(&[new_partitions], &options));
+
+        evaluate_topic_result(topic, result, "altered", "alter")
+    } else {
+        println!("Topic {} unchanged. Please provide a new settings", topic);
+    }
+}
+
+fn evaluate_topic_result(topic: &String,
+                         result: Result<Vec<Result<String, (String, RDKafkaError)>>, KafkaError>,
+                         done: &str,
+                         operation: &str) {
+    match result {
+        Ok(results) => results.iter().for_each(|topic_result| {
+            match topic_result {
+                Ok(_) => println!("Topic '{}' {}", topic, done),
+                Err((_, e)) => println!("Failed to {} topic '{}': {}", operation, topic, e)
+            }
+        }),
+        Err(e) => println!("Failed to {} topic '{}': {}", operation, topic, e)
+    }
+}
+
+fn show_topics(config: &TopicConfig) {
     let consumer: BaseConsumer = create_consumer(&config.base, None);
     let metadata = consumer
         .fetch_metadata(None, Duration::from_millis(3000))
         .expect("Failed to fetch metadata");
     let mut rec_topics = Vec::<Topic>::new();
-    let topics: Vec<&MetadataTopic> = match config.topic {
+    let topics: Vec<&MetadataTopic> = match &config.topic {
         None => metadata.topics().iter().collect(),
-        Some(topic) => metadata.topics().iter().filter(|t| t.name().eq(&topic)).collect()
+        Some(topic) => metadata.topics().iter().filter(|t| t.name().eq(topic)).collect()
     };
 
     for topic in topics {
@@ -389,7 +450,8 @@ fn cmd_topics(matches: &ArgMatches) {
 
     match config.mode {
         TopicMode::LIST => println!("{}", json!(rec_topics.iter().map(|t| t.name.as_str()).collect::<Vec<&str>>()).to_string()),
-        TopicMode::DESCRIBE => println!("{}", json!(rec_topics).to_string())
+        TopicMode::DESCRIBE => println!("{}", json!(rec_topics).to_string()),
+        _ => {}
     }
 }
 

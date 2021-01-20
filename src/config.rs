@@ -1,6 +1,6 @@
 use clap::ArgMatches;
 
-use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
+use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS, ARG_ALTER, ARG_CREATE};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -71,6 +71,9 @@ impl ConfigConfig {
 pub enum TopicMode {
     LIST,
     DESCRIBE,
+    CREATE,
+    DELETE,
+    ALTER,
 }
 
 pub struct TopicConfig {
@@ -78,6 +81,7 @@ pub struct TopicConfig {
     pub mode: TopicMode,
     pub topic: Option<String>,
     pub with_offsets: bool,
+    pub partitions: Option<i32>
 }
 
 impl TopicConfig {
@@ -85,16 +89,27 @@ impl TopicConfig {
         let base = BaseConfig::new(matches);
         let mode = match matches.is_present(ARG_LIST) {
             true => TopicMode::LIST,
-            _ => TopicMode::DESCRIBE
+            _ => match matches.is_present(ARG_DESCRIBE) {
+                true => TopicMode::DESCRIBE,
+                _ => match matches.is_present(ARG_ALTER) {
+                    true => TopicMode::ALTER,
+                    _ => match matches.is_present(ARG_CREATE) {
+                        true => TopicMode::CREATE,
+                        _ => TopicMode::DELETE
+                    }
+                }
+            }
         };
         let topic = matches.value_of(ARG_TOPIC).map(|s| s.to_string());
         let with_offsets = matches.is_present(ARG_WITH_OFFSETS);
+        let partitions = matches.value_of(ARG_PARTITIONS).map(|s| parse_partition(&s.to_string()));
 
         Self {
             base,
             mode,
             topic,
             with_offsets,
+            partitions
         }
     }
 }

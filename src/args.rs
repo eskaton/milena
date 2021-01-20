@@ -20,6 +20,9 @@ pub const ARG_TAIL: &'static str = "tail";
 pub const ARG_COUNT: &'static str = "count";
 pub const ARG_LIST: &'static str = "list";
 pub const ARG_DESCRIBE: &'static str = "describe";
+pub const ARG_CREATE: &'static str = "create";
+pub const ARG_DELETE: &'static str = "delete";
+pub const ARG_ALTER: &'static str = "alter";
 pub const ARG_PAYLOAD_FILE: &'static str = "payload-file";
 pub const ARG_KEY: &'static str = "key";
 pub const ARG_KEY_FILE: &'static str = "key-file";
@@ -49,6 +52,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
     let arg_extra_properties_file = Arg::with_name(ARG_EXTRA_PROPERTIES_FILE)
         .help("A file containing additional properties to pass to librdkafka")
         .long(ARG_EXTRA_PROPERTIES_FILE)
+        .short("X")
         .value_name("PROPERTIES_FILE")
         .conflicts_with(ARG_EXTRA_PROPERTIES);
 
@@ -72,6 +76,31 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .help("Describe the object")
         .short("d")
         .long(ARG_DESCRIBE);
+
+    let arg_alter = Arg::with_name(ARG_ALTER)
+        .help("Alter a partition")
+        .short("a")
+        .long(ARG_ALTER)
+        .requires(ARG_TOPIC);
+
+    let arg_create = Arg::with_name(ARG_CREATE)
+        .help("Create a topic")
+        .short("c")
+        .long(ARG_CREATE)
+        .requires(ARG_TOPIC);
+
+    let arg_delete = Arg::with_name(ARG_DELETE)
+        .help("Delete a topic")
+        .short("D")
+        .long(ARG_DELETE)
+        .requires(ARG_TOPIC);
+
+    let arg_alter_partitions = Arg::with_name(ARG_PARTITIONS)
+        .help("Number of partitions when altering a topic")
+        .long(ARG_PARTITIONS)
+        .short("p")
+        .value_name("PARTITIONS")
+        .requires(ARG_ALTER);
 
     let arg_partitions = Arg::with_name(ARG_PARTITIONS)
         .help("A comma separated list of partition numbers (Default: 0)")
@@ -170,10 +199,14 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_extra_properties_file)
             .arg(&arg_list)
             .arg(&arg_describe)
+            .arg(&arg_create)
+            .arg(&arg_delete)
+            .arg(&arg_alter)
             .arg(&arg_topic)
             .arg(&arg_with_offsets)
+            .arg(&arg_alter_partitions)
             .group(ArgGroup::with_name("mode")
-                .args(&[ARG_LIST, ARG_DESCRIBE])
+                .args(&[ARG_LIST, ARG_DESCRIBE, ARG_CREATE, ARG_DELETE, ARG_ALTER])
                 .required(true)))
         .subcommand(SubCommand::with_name(CMD_GROUPS)
             .about("Display information about groups")
