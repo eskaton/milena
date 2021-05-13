@@ -2,6 +2,7 @@ use clap::ArgMatches;
 
 use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS, ARG_ALTER, ARG_CREATE};
 use crate::DEFAULT_GROUP_ID;
+use std::path::Path;
 
 pub struct BaseConfig {
     pub servers: Vec<String>,
@@ -28,6 +29,8 @@ impl BaseConfig {
             return Option::from(nv_pairs);
         } else if matches.is_present(ARG_EXTRA_PROPERTIES_FILE) {
             let path = matches.value_of(ARG_EXTRA_PROPERTIES_FILE).unwrap();
+
+            assert!(Path::new(path).exists(), "File {} doesn't exist", path);
 
             return Option::from(dotproperties::parse_from_file(path).unwrap());
         }
