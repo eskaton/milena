@@ -15,6 +15,7 @@ pub const ARG_WITH_OFFSETS: &'static str = "with-offsets";
 pub const ARG_TOPIC: &'static str = "topic";
 pub const ARG_OFFSETS: &'static str = "offsets";
 pub const ARG_PARTITIONS: &'static str = "partitions";
+pub const ARG_REPLICATION: &'static str = "replication";
 pub const ARG_CONSUMER_GROUP: &'static str = "consumer-group";
 pub const ARG_FOLLOW: &'static str = "follow";
 pub const ARG_TAIL: &'static str = "tail";
@@ -68,11 +69,17 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .long(ARG_TOPIC)
         .value_name("TOPIC");
 
-    let arg_alter_partitions = Arg::with_name(ARG_PARTITIONS)
+    let arg_topic_partitions = Arg::with_name(ARG_PARTITIONS)
         .help("Number of partitions when altering a topic")
         .long(ARG_PARTITIONS)
         .short("p")
         .value_name("PARTITIONS");
+
+    let arg_replication = Arg::with_name(ARG_REPLICATION)
+        .help("Replication factor")
+        .long(ARG_REPLICATION)
+        .short("r")
+        .value_name("REPLICATION");
 
     let arg_partitions = Arg::with_name(ARG_PARTITIONS)
         .help("A comma separated list of partition numbers (Default: 0)")
@@ -200,7 +207,9 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
                 .arg(&arg_servers)
                 .arg(&arg_extra_properties)
                 .arg(&arg_extra_properties_file)
-                .arg(&arg_topic.clone().required(true)))
+                .arg(&arg_topic.clone().required(true))
+                .arg(&arg_topic_partitions)
+                .arg(&arg_replication))
             .subcommand(SubCommand::with_name(ARG_DELETE)
                 .about("Delete a topic")
                 .arg(&arg_servers)
@@ -213,7 +222,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
                 .arg(&arg_extra_properties)
                 .arg(&arg_extra_properties_file)
                 .arg(&arg_topic.clone().required(true))
-                .arg(&arg_alter_partitions)))
+                .arg(&arg_topic_partitions)))
         .subcommand(SubCommand::with_name(CMD_GROUPS)
             .about("Display information about groups")
             .arg(&arg_servers)

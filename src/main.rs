@@ -438,7 +438,9 @@ fn cmd_topics(matches: &ArgMatches) {
 fn create_topic(config: &TopicConfig) {
     let client = create_admin_client(&config.base);
     let topic = config.topic.as_ref().unwrap();
-    let new_topic = NewTopic::new(topic, 1, Fixed(1));
+    let partitions = config.partitions.unwrap_or(1);
+    let replication = config.replication.unwrap_or(1);
+    let new_topic = NewTopic::new(topic, partitions, Fixed(replication));
     let options = AdminOptions::new();
     let result = executor::block_on(client.create_topics(&[new_topic], &options));
 

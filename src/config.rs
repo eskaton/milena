@@ -2,7 +2,7 @@ use std::path::Path;
 
 use clap::ArgMatches;
 
-use crate::args::{ARG_ALTER, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_CREATE, ARG_DELETE, ARG_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
+use crate::args::{ARG_ALTER, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_CREATE, ARG_DELETE, ARG_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -136,6 +136,7 @@ pub struct TopicConfig {
     pub topic: Option<String>,
     pub with_offsets: bool,
     pub partitions: Option<i32>,
+    pub replication: Option<i32>,
 }
 
 impl TopicConfig {
@@ -153,6 +154,7 @@ impl TopicConfig {
         let topic = matches.value_of(ARG_TOPIC).map(|s| s.to_string());
         let with_offsets = matches.is_present(ARG_WITH_OFFSETS);
         let partitions = matches.value_of(ARG_PARTITIONS).map(|s| parse_partition(&s.to_string()));
+        let replication = matches.value_of(ARG_REPLICATION).map(|s| parse_replication(&s.to_string()));
 
         Self {
             base,
@@ -160,6 +162,7 @@ impl TopicConfig {
             topic,
             with_offsets,
             partitions,
+            replication,
         }
     }
 }
@@ -249,6 +252,11 @@ fn parse_partition(str: &String) -> i32 {
 fn parse_offset(str: &String) -> i64 {
     return str.parse::<i64>()
         .expect(format!("Invalid offset: '{}'", str).as_str());
+}
+
+fn parse_replication(str: &String) -> i32 {
+    return str.parse::<i32>()
+        .expect(format!("Invalid replication factor: '{}'", str).as_str());
 }
 
 fn parse_number(str: &String) -> i64 {
