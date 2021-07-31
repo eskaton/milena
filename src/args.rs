@@ -231,6 +231,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_extra_properties_file))
         .subcommand(SubCommand::with_name(CMD_OFFSETS)
             .about("Display and alter offsets")
+            .setting(AppSettings::SubcommandRequiredElseHelp)
             .subcommand(SubCommand::with_name(ARG_LIST)
                 .about("List offsets")
                 .arg(&arg_servers)

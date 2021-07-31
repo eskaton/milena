@@ -91,10 +91,7 @@ impl OffsetsConfig {
         let (matches, mode) = match matches.subcommand() {
             (ARG_LIST, Some(matches)) => (matches, OffsetMode::LIST),
             (ARG_ALTER, Some(matches)) => (matches, OffsetMode::ALTER),
-            _ => {
-                println!("{}", matches.usage());
-                std::process::exit(1)
-            }
+            (cmd, _) => panic!("Invalid subcommand {}", cmd)
         };
 
         let base = BaseConfig::new(matches);
