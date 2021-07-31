@@ -6,6 +6,7 @@ pub const CMD_GROUPS: &'static str = "groups";
 pub const CMD_CONFIG: &'static str = "config";
 pub const CMD_CONSUME: &'static str = "consume";
 pub const CMD_PRODUCE: &'static str = "produce";
+pub const CMD_OFFSETS: &'static str = "offsets";
 
 pub const ARG_BOOTSTRAP_SERVER: &'static str = "bootstrap-server";
 pub const ARG_EXTRA_PROPERTIES: &'static str = "extra-properties";
@@ -59,7 +60,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
     let arg_with_offsets = Arg::with_name(ARG_WITH_OFFSETS)
         .help("Include offsets")
         .long(ARG_WITH_OFFSETS)
-        .conflicts_with(ARG_LIST);
+        .conflicts_with_all(&[ARG_LIST, ARG_ALTER, ARG_CREATE, ARG_DELETE]);
 
     let arg_topic = Arg::with_name(ARG_TOPIC)
         .help("A topic name")
@@ -67,29 +68,29 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .long(ARG_TOPIC)
         .value_name("TOPIC");
 
-    let arg_list = Arg::with_name(ARG_LIST)
+    let art_topics_list = Arg::with_name(ARG_LIST)
         .help("List names only")
         .short("l")
         .long(ARG_LIST);
 
-    let arg_describe = Arg::with_name(ARG_DESCRIBE)
+    let arg_topics_describe = Arg::with_name(ARG_DESCRIBE)
         .help("Describe the object")
         .short("d")
         .long(ARG_DESCRIBE);
 
-    let arg_alter = Arg::with_name(ARG_ALTER)
+    let arg_topics_alter = Arg::with_name(ARG_ALTER)
         .help("Alter a partition")
         .short("a")
         .long(ARG_ALTER)
         .requires(ARG_TOPIC);
 
-    let arg_create = Arg::with_name(ARG_CREATE)
+    let arg_topics_create = Arg::with_name(ARG_CREATE)
         .help("Create a topic")
         .short("c")
         .long(ARG_CREATE)
         .requires(ARG_TOPIC);
 
-    let arg_delete = Arg::with_name(ARG_DELETE)
+    let arg_topics_delete = Arg::with_name(ARG_DELETE)
         .help("Delete a topic")
         .short("D")
         .long(ARG_DELETE)
@@ -183,7 +184,22 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
     let arg_json_batch = Arg::with_name(ARG_JSON_BATCH)
         .long(ARG_JSON_BATCH);
 
-    return App::new("Kafka tool")
+    let arg_offsets_partitions = Arg::with_name(ARG_PARTITIONS)
+        .help("A comma separated list of partition numbers")
+        .short("p")
+        .long(ARG_PARTITIONS)
+        .use_delimiter(true)
+        .value_name("PARTITIONS");
+
+    let arg_offsets_offsets = Arg::with_name(ARG_OFFSETS)
+        .help("A comma separated list of offsets")
+        .short("o")
+        .long(ARG_OFFSETS)
+        .use_delimiter(true)
+        .value_name("OFFSETS")
+        .required(true);
+
+    return App::new("Milena")
         .version(crate_version!())
         .setting(AppSettings::GlobalVersion)
         .setting(AppSettings::VersionlessSubcommands)
@@ -197,11 +213,11 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_servers)
             .arg(&arg_extra_properties)
             .arg(&arg_extra_properties_file)
-            .arg(&arg_list)
-            .arg(&arg_describe)
-            .arg(&arg_create)
-            .arg(&arg_delete)
-            .arg(&arg_alter)
+            .arg(&art_topics_list)
+            .arg(&arg_topics_describe)
+            .arg(&arg_topics_create)
+            .arg(&arg_topics_delete)
+            .arg(&arg_topics_alter)
             .arg(&arg_topic)
             .arg(&arg_with_offsets)
             .arg(&arg_alter_partitions)
@@ -213,6 +229,24 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_servers)
             .arg(&arg_extra_properties)
             .arg(&arg_extra_properties_file))
+        .subcommand(SubCommand::with_name(CMD_OFFSETS)
+            .about("Display and alter offsets")
+            .subcommand(SubCommand::with_name(ARG_LIST)
+                .about("List offsets")
+                .arg(&arg_servers)
+                .arg(&arg_extra_properties)
+                .arg(&arg_extra_properties_file)
+                .arg(&arg_topic)
+                .arg(&arg_group))
+            .subcommand(SubCommand::with_name(ARG_ALTER)
+                .about("Alter offsets")
+                .arg(&arg_servers)
+                .arg(&arg_extra_properties)
+                .arg(&arg_extra_properties_file)
+                .arg(&arg_topic.clone().required(true))
+                .arg(&arg_group.clone().required(true))
+                .arg(&arg_offsets_partitions)
+                .arg(&arg_offsets_offsets)))
         .subcommand(SubCommand::with_name(CMD_CONFIG)
             .about("Display and alter topic configuration")
             .arg(&arg_servers)

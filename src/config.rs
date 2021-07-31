@@ -1,8 +1,9 @@
+use std::path::Path;
+
 use clap::ArgMatches;
 
-use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS, ARG_ALTER, ARG_CREATE};
+use crate::args::{ARG_ALTER, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_CREATE, ARG_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
 use crate::DEFAULT_GROUP_ID;
-use std::path::Path;
 
 pub struct BaseConfig {
     pub servers: Vec<String>,
@@ -71,6 +72,59 @@ impl ConfigConfig {
 }
 
 #[derive(PartialEq)]
+pub enum OffsetMode {
+    LIST,
+    ALTER,
+}
+
+pub struct OffsetsConfig {
+    pub base: BaseConfig,
+    pub mode: OffsetMode,
+    pub topic: Option<String>,
+    pub consumer_group: Option<String>,
+    pub partitions: Option<Vec<i32>>,
+    pub offsets: Option<Vec<i64>>,
+}
+
+impl OffsetsConfig {
+    pub fn new(matches: &ArgMatches) -> Self {
+        let (matches, mode) = match matches.subcommand() {
+            (ARG_LIST, Some(matches)) => (matches, OffsetMode::LIST),
+            (ARG_ALTER, Some(matches)) => (matches, OffsetMode::ALTER),
+            _ => {
+                println!("{}", matches.usage());
+                std::process::exit(1)
+            }
+        };
+
+        let base = BaseConfig::new(matches);
+        let topic = matches.value_of(ARG_TOPIC).map(|s| s.to_string());
+        let consumer_group = matches.value_of(ARG_CONSUMER_GROUP).map(|s| s.to_string());
+        let partitions = match matches.is_present(ARG_PARTITIONS) {
+            true => Some(matches.values_of(ARG_PARTITIONS)
+                .map(|v| v.map(|s| parse_partition(&s.to_string()))
+                    .collect::<Vec<i32>>()).unwrap()),
+            _ => None
+        };
+        let offsets = match matches.is_present(ARG_OFFSETS) {
+            true => Some(matches.values_of(ARG_OFFSETS)
+                .map(|v| v.map(|s| parse_offset(&s.to_string()))
+                    .collect::<Vec<i64>>()).unwrap()),
+            _ => None
+        };
+
+        Self {
+            base,
+            mode,
+            topic,
+            consumer_group,
+            partitions,
+            offsets,
+        }
+    }
+}
+
+#[derive(PartialEq)]
 pub enum TopicMode {
     LIST,
     DESCRIBE,
@@ -84,7 +138,7 @@ pub struct TopicConfig {
     pub mode: TopicMode,
     pub topic: Option<String>,
     pub with_offsets: bool,
-    pub partitions: Option<i32>
+    pub partitions: Option<i32>,
 }
 
 impl TopicConfig {
@@ -112,7 +166,7 @@ impl TopicConfig {
             mode,
             topic,
             with_offsets,
-            partitions
+            partitions,
         }
     }
 }
@@ -196,17 +250,22 @@ impl ConsumeConfig {
 
 fn parse_partition(str: &String) -> i32 {
     return str.parse::<u32>()
-        .expect(format!("Invalid Partition: '{}'", str).as_str()) as i32;
+        .expect(format!("Invalid partition: '{}'", str).as_str()) as i32;
+}
+
+fn parse_offset(str: &String) -> i64 {
+    return str.parse::<i64>()
+        .expect(format!("Invalid offset: '{}'", str).as_str());
 }
 
 fn parse_number(str: &String) -> i64 {
     return str.parse::<i64>()
-        .expect(format!("Invalid Number: '{}'", str).as_str());
+        .expect(format!("Invalid number: '{}'", str).as_str());
 }
 
 fn parse_count(str: &String) -> usize {
     return str.parse::<usize>()
-        .expect(format!("Invalid Count: '{}'", str).as_str());
+        .expect(format!("Invalid count: '{}'", str).as_str());
 }
 
 pub struct ProduceConfig {

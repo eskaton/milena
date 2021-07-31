@@ -3,8 +3,10 @@ extern crate clap;
 
 use std::borrow::{Borrow, Cow};
 use std::cmp::max;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{read, read_to_string};
+use std::iter::FromIterator;
 use std::time::Duration;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -15,7 +17,7 @@ use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
 use rdkafka::admin::{AdminClient, AdminOptions, AlterConfig, ConfigResource, NewPartitions, NewTopic, OwnedResourceSpecifier, ResourceSpecifier};
 use rdkafka::admin::TopicReplication::Fixed;
 use rdkafka::client::{Client, DefaultClientContext};
-use rdkafka::consumer::{BaseConsumer, Consumer};
+use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer};
 use rdkafka::error::{KafkaError, KafkaResult, RDKafkaError};
 use rdkafka::message::{BorrowedHeaders, BorrowedMessage, DeliveryResult, Headers, Message, OwnedHeaders};
 use rdkafka::message::Timestamp::CreateTime;
@@ -26,14 +28,14 @@ use rdkafka::types::RDKafkaType;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::args::{CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_PRODUCE, CMD_TOPICS};
+use crate::args::{CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
 use crate::args::parse_args;
-use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, ProduceConfig, TopicConfig, TopicMode};
+use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
 
 mod args;
 mod config;
 
-const DEFAULT_GROUP_ID: &'static str = "kafka-tool";
+const DEFAULT_GROUP_ID: &'static str = "milena";
 
 #[derive(Debug, Serialize)]
 struct Broker {
@@ -69,6 +71,75 @@ struct TopicConfigs {
 impl TopicConfigs {
     fn new(name: String, configs: Vec<ConfigValue>) -> Self {
         Self { name, configs }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct Group {
+    name: String,
+    protocol_type: String,
+    protocol: String,
+    state: String,
+    members: Vec<Member>,
+}
+
+impl Group {
+    fn new(name: String, protocol_type: String, protocol: String, state: String) -> Self {
+        let members = Vec::<Member>::new();
+
+        Self { name, protocol_type, protocol, state, members }
+    }
+
+    fn add_member(&mut self, member: Member) {
+        self.members.push(member);
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct Member {
+    id: String,
+    client_host: String,
+}
+
+impl Member {
+    fn new(id: String, client_host: String) -> Self {
+        Self { id, client_host }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct GroupOffsets {
+    group: String,
+    topics: Vec<TopicOffsets>,
+}
+
+impl GroupOffsets {
+    fn new(group: String) -> Self {
+        let topics = Vec::<TopicOffsets>::new();
+
+        Self { group, topics }
+    }
+
+    fn add_topic_offsets(&mut self, topic: TopicOffsets) {
+        self.topics.push(topic);
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct TopicOffsets {
+    name: String,
+    offsets: HashMap<i32, i64>,
+}
+
+impl TopicOffsets {
+    fn new(name: String) -> Self {
+        let offsets = HashMap::<i32, i64>::new();
+
+        Self { name, offsets }
+    }
+
+    fn add_offset(&mut self, partition: i32, offset: i64) {
+        self.offsets.insert(partition, offset);
     }
 }
 
@@ -255,6 +326,7 @@ fn create_client_config(config: &BaseConfig) -> ClientConfig {
     let mut client_config: ClientConfig = ClientConfig::new();
 
     client_config.set(&"bootstrap.servers".to_string(), &servers);
+    client_config.set(&"enable.auto.offset.store".to_string(), "false");
 
     match &config.properties {
         Some(properties) => properties.iter().for_each(|p| {
@@ -458,16 +530,116 @@ fn show_topics(config: &TopicConfig) {
 fn cmd_groups(matches: &ArgMatches) {
     let config = BaseConfig::new(matches);
     let client: BaseConsumer = create_consumer(&config, None);
-    let metadata = client
+    let group_list = client
         .fetch_group_list(None, Duration::from_millis(3000))
-        .expect("Failed to fetch group metadata");
+        .expect("Failed to fetch group list");
+    let mut rec_groups = Vec::<Group>::new();
 
-    metadata.groups().iter().for_each(|group| {
-        println!("Group: {} protocol_type={} protocol={} state={}", group.name(), group.protocol_type(), group.protocol(), group.state());
+    group_list.groups().iter().for_each(|group| {
+        let mut rec_group = Group::new(group.name().to_string(), group.protocol_type().to_string(), group.protocol().to_string(), group.state().to_string());
 
-        group.members().iter().for_each(|member|
-            println!(" Member: {} host: {}", member.id(), member.client_host()))
+        group.members().iter().for_each(|member| rec_group.add_member(Member::new(member.id().to_string(), member.client_host().to_string())));
+
+        rec_groups.push(rec_group)
     });
+
+    println!("{}", json!(rec_groups).to_string())
+}
+
+fn cmd_offsets(matches: &ArgMatches) {
+    let config = OffsetsConfig::new(matches);
+
+    match config.mode {
+        OffsetMode::ALTER => alter_offsets(&config),
+        _ => show_offsets(&config)
+    };
+}
+
+fn show_offsets(config: &OffsetsConfig) {
+    let client: BaseConsumer = create_consumer(&config.base, None);
+    let group_list = client
+        .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), Duration::from_millis(3000))
+        .expect("Failed to fetch group list");
+    let metadata = client
+        .fetch_metadata(config.topic.as_ref().map(|topic| topic.as_str()), Duration::from_millis(3000))
+        .expect("Failed to fetch metadata");
+    let groups: Vec<String> = group_list.groups().iter().map(|group| group.name().to_string()).collect();
+    let topics: Vec<&MetadataTopic> = metadata.topics().iter().collect();
+    let mut rec_group_offsets = Vec::<GroupOffsets>::new();
+
+    groups.iter().for_each(|group| {
+        let consumer: BaseConsumer = create_consumer(&config.base, Some(group.to_string()));
+        let mut topic_partitions: TopicPartitionList = TopicPartitionList::new();
+        let mut group_offsets = GroupOffsets::new(group.to_string());
+
+        topics.iter().for_each(|topic| {
+            topic.partitions().iter().for_each(|partition| {
+                topic_partitions.add_partition(topic.name(), partition.id());
+            });
+        });
+
+        let offsets = consumer.committed_offsets(topic_partitions, Duration::from_millis(3000)).expect("Failed to fetch offsets");
+        let available_topics: HashSet<_> = offsets.elements().iter().map(|elem| elem.topic().to_string()).collect();
+
+        for topic_name in available_topics {
+            let mut topic_offsets = TopicOffsets::new(topic_name.to_string());
+
+            offsets.elements_for_topic(topic_name.as_str()).iter().for_each(|elem| {
+                match elem.offset() {
+                    Offset(offset) => topic_offsets.add_offset(elem.partition(), offset),
+                    _ => ()
+                }
+            });
+
+            if !topic_offsets.offsets.is_empty() {
+                group_offsets.add_topic_offsets(topic_offsets)
+            }
+        }
+
+        if !group_offsets.topics.is_empty() {
+            rec_group_offsets.push(group_offsets)
+        }
+    });
+
+    println!("{}", json!(rec_group_offsets).to_string())
+}
+
+fn alter_offsets(config: &OffsetsConfig) {
+    let client: BaseConsumer = create_consumer(&config.base, Some(config.consumer_group.as_ref().unwrap().to_string()));
+    let mut topic_partitions: TopicPartitionList = TopicPartitionList::new();
+    let topic = config.topic.as_ref().unwrap();
+    let offsets = config.offsets.as_ref().unwrap();
+    let metadata = client.fetch_metadata(Some(topic.as_str()), Duration::from_millis(3000))
+        .expect(format!("Failed to fetch metadata for topic {}", topic).as_str());
+    let metadata_partitions: HashSet<i32> = metadata.topics().iter().flat_map(|t| t.partitions().iter().map(|p| p.id())).collect();
+
+    if config.partitions.as_ref().is_some() {
+        let partitions = config.partitions.as_ref().unwrap();
+
+        if partitions.len() != offsets.len() {
+            panic!("Number of provided partitions ({}) doesn't match number of offsets ({})",
+                   partitions.len(), offsets.len())
+        }
+
+        let partition_set = HashSet::from_iter(partitions.iter().cloned());
+        let difference: HashSet<_> = partition_set.difference(&metadata_partitions).collect();
+
+        if !difference.is_empty() {
+            panic!("Invalid partitions: {:?}", difference);
+        }
+
+        partitions.iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), *p, Offset(*o)));
+    } else {
+        if metadata_partitions.len() != offsets.len() {
+            panic!("Number of offsets ({}) doesn't match number of partitions ({})",
+                   offsets.len(), metadata_partitions.len());
+        }
+
+        (0 as i32..offsets.len() as i32).into_iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), p, Offset(*o)))
+    }
+
+    client.store_offsets(&topic_partitions).expect("Failed to store offsets");
+    client.commit(&topic_partitions, CommitMode::Sync).expect("Failed to commit offsets");
 }
 
 fn cmd_consume(matches: &ArgMatches) {
@@ -684,6 +856,7 @@ fn main() {
         (CMD_BROKERS, Some(matches)) => cmd_brokers(&matches),
         (CMD_TOPICS, Some(matches)) => cmd_topics(&matches),
         (CMD_GROUPS, Some(matches)) => cmd_groups(&matches),
+        (CMD_OFFSETS, Some(matches)) => cmd_offsets(&matches),
         (CMD_CONFIG, Some(matches)) => cmd_config(&matches),
         (CMD_CONSUME, Some(matches)) => cmd_consume(&matches),
         (CMD_PRODUCE, Some(matches)) => cmd_produce(&matches),
