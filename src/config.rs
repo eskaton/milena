@@ -2,7 +2,7 @@ use std::path::Path;
 
 use clap::ArgMatches;
 
-use crate::args::{ARG_ALTER, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_CREATE, ARG_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
+use crate::args::{ARG_ALTER, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_CREATE, ARG_DELETE, ARG_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -140,20 +140,16 @@ pub struct TopicConfig {
 
 impl TopicConfig {
     pub fn new(matches: &ArgMatches) -> Self {
-        let base = BaseConfig::new(matches);
-        let mode = match matches.is_present(ARG_LIST) {
-            true => TopicMode::LIST,
-            _ => match matches.is_present(ARG_DESCRIBE) {
-                true => TopicMode::DESCRIBE,
-                _ => match matches.is_present(ARG_ALTER) {
-                    true => TopicMode::ALTER,
-                    _ => match matches.is_present(ARG_CREATE) {
-                        true => TopicMode::CREATE,
-                        _ => TopicMode::DELETE
-                    }
-                }
-            }
+        let (matches, mode) = match matches.subcommand() {
+            (ARG_LIST, Some(matches)) => (matches, TopicMode::LIST),
+            (ARG_DESCRIBE, Some(matches)) => (matches, TopicMode::DESCRIBE),
+            (ARG_ALTER, Some(matches)) => (matches, TopicMode::ALTER),
+            (ARG_CREATE, Some(matches)) => (matches, TopicMode::CREATE),
+            (ARG_DELETE, Some(matches)) => (matches, TopicMode::DELETE),
+            (cmd, _) => panic!("Invalid subcommand {}", cmd)
         };
+
+        let base = BaseConfig::new(matches);
         let topic = matches.value_of(ARG_TOPIC).map(|s| s.to_string());
         let with_offsets = matches.is_present(ARG_WITH_OFFSETS);
         let partitions = matches.value_of(ARG_PARTITIONS).map(|s| parse_partition(&s.to_string()));

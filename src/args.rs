@@ -1,4 +1,4 @@
-use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 pub const CMD_BROKERS: &'static str = "brokers";
 pub const CMD_TOPICS: &'static str = "topics";
@@ -68,40 +68,11 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .long(ARG_TOPIC)
         .value_name("TOPIC");
 
-    let art_topics_list = Arg::with_name(ARG_LIST)
-        .help("List names only")
-        .short("l")
-        .long(ARG_LIST);
-
-    let arg_topics_describe = Arg::with_name(ARG_DESCRIBE)
-        .help("Describe the object")
-        .short("d")
-        .long(ARG_DESCRIBE);
-
-    let arg_topics_alter = Arg::with_name(ARG_ALTER)
-        .help("Alter a partition")
-        .short("a")
-        .long(ARG_ALTER)
-        .requires(ARG_TOPIC);
-
-    let arg_topics_create = Arg::with_name(ARG_CREATE)
-        .help("Create a topic")
-        .short("c")
-        .long(ARG_CREATE)
-        .requires(ARG_TOPIC);
-
-    let arg_topics_delete = Arg::with_name(ARG_DELETE)
-        .help("Delete a topic")
-        .short("D")
-        .long(ARG_DELETE)
-        .requires(ARG_TOPIC);
-
     let arg_alter_partitions = Arg::with_name(ARG_PARTITIONS)
         .help("Number of partitions when altering a topic")
         .long(ARG_PARTITIONS)
         .short("p")
-        .value_name("PARTITIONS")
-        .requires(ARG_ALTER);
+        .value_name("PARTITIONS");
 
     let arg_partitions = Arg::with_name(ARG_PARTITIONS)
         .help("A comma separated list of partition numbers (Default: 0)")
@@ -209,21 +180,40 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_extra_properties)
             .arg(&arg_extra_properties_file))
         .subcommand(SubCommand::with_name(CMD_TOPICS)
-            .about("Display information about topics")
-            .arg(&arg_servers)
-            .arg(&arg_extra_properties)
-            .arg(&arg_extra_properties_file)
-            .arg(&art_topics_list)
-            .arg(&arg_topics_describe)
-            .arg(&arg_topics_create)
-            .arg(&arg_topics_delete)
-            .arg(&arg_topics_alter)
-            .arg(&arg_topic)
-            .arg(&arg_with_offsets)
-            .arg(&arg_alter_partitions)
-            .group(ArgGroup::with_name("mode")
-                .args(&[ARG_LIST, ARG_DESCRIBE, ARG_CREATE, ARG_DELETE, ARG_ALTER])
-                .required(true)))
+            .about("Manage topics")
+            .setting(AppSettings::SubcommandRequiredElseHelp)
+            .subcommand(SubCommand::with_name(ARG_LIST)
+                .about("List topics")
+                .arg(&arg_servers)
+                .arg(&arg_extra_properties)
+                .arg(&arg_extra_properties_file)
+                .arg(&arg_topic))
+            .subcommand(SubCommand::with_name(ARG_DESCRIBE)
+                .about("Describe topics")
+                .arg(&arg_servers)
+                .arg(&arg_extra_properties)
+                .arg(&arg_extra_properties_file)
+                .arg(&arg_topic)
+                .arg(&arg_with_offsets))
+            .subcommand(SubCommand::with_name(ARG_CREATE)
+                .about("Create a topic")
+                .arg(&arg_servers)
+                .arg(&arg_extra_properties)
+                .arg(&arg_extra_properties_file)
+                .arg(&arg_topic.clone().required(true)))
+            .subcommand(SubCommand::with_name(ARG_DELETE)
+                .about("Delete a topic")
+                .arg(&arg_servers)
+                .arg(&arg_extra_properties)
+                .arg(&arg_extra_properties_file)
+                .arg(&arg_topic.clone().required(true)))
+            .subcommand(SubCommand::with_name(ARG_ALTER)
+                .about("Alter a topic")
+                .arg(&arg_servers)
+                .arg(&arg_extra_properties)
+                .arg(&arg_extra_properties_file)
+                .arg(&arg_topic.clone().required(true))
+                .arg(&arg_alter_partitions)))
         .subcommand(SubCommand::with_name(CMD_GROUPS)
             .about("Display information about groups")
             .arg(&arg_servers)
