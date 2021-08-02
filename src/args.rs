@@ -182,7 +182,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .setting(AppSettings::GlobalVersion)
         .setting(AppSettings::VersionlessSubcommands)
         .subcommand(SubCommand::with_name(CMD_BROKERS)
-            .about("Display information the brokers")
+            .about("Display information about the brokers")
             .arg(&arg_servers)
             .arg(&arg_extra_properties)
             .arg(&arg_extra_properties_file))

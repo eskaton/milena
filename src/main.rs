@@ -412,8 +412,8 @@ fn config_set(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>)
 }
 
 fn cmd_brokers(matches: &ArgMatches) {
-    let config = TopicConfig::new(matches);
-    let client: Client = create_client(&config.base);
+    let config = BaseConfig::new(matches);
+    let client: Client = create_client(&config);
     let metadata = client
         .fetch_metadata(None, Duration::from_millis(3000))
         .expect("Failed to fetch metadata");
@@ -532,6 +532,10 @@ fn show_topics(config: &TopicConfig) {
 fn cmd_groups(matches: &ArgMatches) {
     let config = BaseConfig::new(matches);
     let client: BaseConsumer = create_consumer(&config, None);
+
+    client.fetch_metadata(None, Duration::from_millis(3000))
+        .expect("Failed to fetch metadata");
+
     let group_list = client
         .fetch_group_list(None, Duration::from_millis(3000))
         .expect("Failed to fetch group list");
@@ -559,12 +563,12 @@ fn cmd_offsets(matches: &ArgMatches) {
 
 fn show_offsets(config: &OffsetsConfig) {
     let client: BaseConsumer = create_consumer(&config.base, None);
-    let group_list = client
-        .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), Duration::from_millis(3000))
-        .expect("Failed to fetch group list");
     let metadata = client
         .fetch_metadata(config.topic.as_ref().map(|topic| topic.as_str()), Duration::from_millis(3000))
         .expect("Failed to fetch metadata");
+    let group_list = client
+        .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), Duration::from_millis(3000))
+        .expect("Failed to fetch group list");
     let groups: Vec<String> = group_list.groups().iter().map(|group| group.name().to_string()).collect();
     let topics: Vec<&MetadataTopic> = metadata.topics().iter().collect();
     let mut rec_group_offsets = Vec::<GroupOffsets>::new();
