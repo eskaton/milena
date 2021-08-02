@@ -8,6 +8,12 @@ pub const CMD_CONSUME: &'static str = "consume";
 pub const CMD_PRODUCE: &'static str = "produce";
 pub const CMD_OFFSETS: &'static str = "offsets";
 
+pub const OP_LIST: &'static str = "list";
+pub const OP_DESCRIBE: &'static str = "describe";
+pub const OP_CREATE: &'static str = "create";
+pub const OP_DELETE: &'static str = "delete";
+pub const OP_ALTER: &'static str = "alter";
+
 pub const ARG_BOOTSTRAP_SERVER: &'static str = "bootstrap-server";
 pub const ARG_EXTRA_PROPERTIES: &'static str = "extra-properties";
 pub const ARG_EXTRA_PROPERTIES_FILE: &'static str = "extra-properties-file";
@@ -20,11 +26,6 @@ pub const ARG_CONSUMER_GROUP: &'static str = "consumer-group";
 pub const ARG_FOLLOW: &'static str = "follow";
 pub const ARG_TAIL: &'static str = "tail";
 pub const ARG_COUNT: &'static str = "count";
-pub const ARG_LIST: &'static str = "list";
-pub const ARG_DESCRIBE: &'static str = "describe";
-pub const ARG_CREATE: &'static str = "create";
-pub const ARG_DELETE: &'static str = "delete";
-pub const ARG_ALTER: &'static str = "alter";
 pub const ARG_PAYLOAD_FILE: &'static str = "payload-file";
 pub const ARG_KEY: &'static str = "key";
 pub const ARG_KEY_FILE: &'static str = "key-file";
@@ -191,22 +192,22 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .subcommand(SubCommand::with_name(CMD_TOPICS)
             .about("Manage topics")
             .setting(AppSettings::SubcommandRequiredElseHelp)
-            .subcommand(add_global_args(SubCommand::with_name(ARG_LIST)
+            .subcommand(add_global_args(SubCommand::with_name(OP_LIST)
                 .about("List topics")
                 .arg(&arg_topic)))
-            .subcommand(add_global_args(SubCommand::with_name(ARG_DESCRIBE)
+            .subcommand(add_global_args(SubCommand::with_name(OP_DESCRIBE)
                 .about("Describe topics")
                 .arg(&arg_topic)
                 .arg(&arg_with_offsets)))
-            .subcommand(add_global_args(SubCommand::with_name(ARG_CREATE)
+            .subcommand(add_global_args(SubCommand::with_name(OP_CREATE)
                 .about("Create a topic")
                 .arg(&arg_topic.clone().required(true))
                 .arg(&arg_topic_partitions)
                 .arg(&arg_replication)))
-            .subcommand(add_global_args(SubCommand::with_name(ARG_DELETE)
+            .subcommand(add_global_args(SubCommand::with_name(OP_DELETE)
                 .about("Delete a topic")
                 .arg(&arg_topic.clone().required(true))))
-            .subcommand(add_global_args(SubCommand::with_name(ARG_ALTER)
+            .subcommand(add_global_args(SubCommand::with_name(OP_ALTER)
                 .about("Alter a topic")
                 .arg(&arg_topic.clone().required(true))
                 .arg(&arg_topic_partitions))))
@@ -216,11 +217,11 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .subcommand(SubCommand::with_name(CMD_OFFSETS)
             .about("Display and alter offsets")
             .setting(AppSettings::SubcommandRequiredElseHelp)
-            .subcommand(add_global_args(SubCommand::with_name(ARG_LIST)
+            .subcommand(add_global_args(SubCommand::with_name(OP_LIST)
                 .about("List offsets")
                 .arg(&arg_topic)
                 .arg(&arg_group)))
-            .subcommand(add_global_args(SubCommand::with_name(ARG_ALTER)
+            .subcommand(add_global_args(SubCommand::with_name(OP_ALTER)
                 .about("Alter offsets")
                 .arg(&arg_topic.clone().required(true))
                 .arg(&arg_group.clone().required(true))
