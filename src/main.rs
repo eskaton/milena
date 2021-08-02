@@ -30,7 +30,7 @@ use serde_json::json;
 
 use crate::args::{CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
 use crate::args::parse_args;
-use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
+use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode, GroupConfig};
 
 mod args;
 mod config;
@@ -530,14 +530,14 @@ fn show_topics(config: &TopicConfig) {
 }
 
 fn cmd_groups(matches: &ArgMatches) {
-    let config = BaseConfig::new(matches);
-    let client: BaseConsumer = create_consumer(&config, None);
+    let config = GroupConfig::new(matches);
+    let client: BaseConsumer = create_consumer(&config.base, None);
 
     client.fetch_metadata(None, Duration::from_millis(3000))
         .expect("Failed to fetch metadata");
 
     let group_list = client
-        .fetch_group_list(None, Duration::from_millis(3000))
+        .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), Duration::from_millis(3000))
         .expect("Failed to fetch group list");
     let mut rec_groups = Vec::<Group>::new();
 

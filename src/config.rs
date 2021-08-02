@@ -46,6 +46,20 @@ pub enum ConfigMode {
     SET,
 }
 
+pub struct GroupConfig {
+    pub base: BaseConfig,
+    pub consumer_group: Option<String>,
+}
+
+impl GroupConfig {
+    pub fn new(matches: &ArgMatches) -> Self {
+        let base = BaseConfig::new(matches);
+        let consumer_group = matches.value_of(ARG_CONSUMER_GROUP).map(|s| s.to_string());
+
+        Self { base, consumer_group }
+    }
+}
+
 pub struct ConfigConfig {
     pub base: BaseConfig,
     pub topic: Option<String>,
