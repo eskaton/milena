@@ -34,6 +34,7 @@ pub const ARG_NO_HEADERS: &'static str = "no-headers";
 pub const ARG_GET: &'static str = "get";
 pub const ARG_SET: &'static str = "set";
 pub const ARG_JSON_BATCH: &'static str = "json-batch";
+pub const ARG_TIMEOUT: &'static str = "timeout";
 
 fn add_global_args<'a>(app: App<'a, 'a>) -> App<'a, 'a> {
     let arg_servers: Arg = Arg::with_name(ARG_BOOTSTRAP_SERVER)
@@ -59,9 +60,17 @@ fn add_global_args<'a>(app: App<'a, 'a>) -> App<'a, 'a> {
         .value_name("PROPERTIES_FILE")
         .conflicts_with(ARG_EXTRA_PROPERTIES);
 
+    let arg_timeout = Arg::with_name(ARG_TIMEOUT)
+        .help("Timeout in milliseconds")
+        .short("T")
+        .long(ARG_TIMEOUT)
+        .value_name("TIMEOUT")
+        .default_value("3000");
+
     return app.arg(&arg_servers)
         .arg(&arg_extra_properties)
-        .arg(&arg_extra_properties_file);
+        .arg(&arg_extra_properties_file)
+        .arg(&arg_timeout);
 }
 
 pub fn parse_args(args: &Vec<String>) -> ArgMatches {
@@ -88,7 +97,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .value_name("REPLICATION");
 
     let arg_partitions = Arg::with_name(ARG_PARTITIONS)
-        .help("A comma separated list of partition numbers (Default: 0)")
+        .help("A comma separated list of partition numbers")
         .short("p")
         .long(ARG_PARTITIONS)
         .use_delimiter(true)
@@ -168,13 +177,6 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
     let arg_json_batch = Arg::with_name(ARG_JSON_BATCH)
         .long(ARG_JSON_BATCH);
 
-    let arg_offsets_partitions = Arg::with_name(ARG_PARTITIONS)
-        .help("A comma separated list of partition numbers")
-        .short("p")
-        .long(ARG_PARTITIONS)
-        .use_delimiter(true)
-        .value_name("PARTITIONS");
-
     let arg_offsets_offsets = Arg::with_name(ARG_OFFSETS)
         .help("A comma separated list of offsets")
         .short("o")
@@ -225,7 +227,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
                 .about("Alter offsets")
                 .arg(&arg_topic.clone().required(true))
                 .arg(&arg_group.clone().required(true))
-                .arg(&arg_offsets_partitions)
+                .arg(&arg_partitions)
                 .arg(&arg_offsets_offsets))))
         .subcommand(add_global_args(SubCommand::with_name(CMD_CONFIG)
             .about("Display and alter topic configuration")
@@ -235,7 +237,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .subcommand(add_global_args(SubCommand::with_name(CMD_CONSUME)
             .about("Consume from a topic")
             .arg(&arg_topic.clone().required(true))
-            .arg(&arg_partitions)
+            .arg(&arg_partitions.clone().default_value("0"))
             .arg(&arg_offsets)
             .arg(&arg_group)
             .arg(&arg_follow)

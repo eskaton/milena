@@ -30,7 +30,7 @@ use serde_json::json;
 
 use crate::args::{CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
 use crate::args::parse_args;
-use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode, GroupConfig};
+use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, GroupConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
 
 mod args;
 mod config;
@@ -381,7 +381,7 @@ fn config_get(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>)
 async fn get_configs(config: &ConfigConfig, admin_client: &AdminClient<DefaultClientContext>, options: &AdminOptions) -> Vec<Result<ConfigResource, RDKafkaError>> {
     let client = create_client(&config.base);
     let metadata = client
-        .fetch_metadata(None, Duration::from_millis(3000))
+        .fetch_metadata(None, config.base.timeout)
         .expect("Failed to fetch metadata");
     let topics: Vec<String> = match &config.topic {
         None => metadata.topics().iter().map(|m| m.name().to_string()).collect(),
@@ -415,7 +415,7 @@ fn cmd_brokers(matches: &ArgMatches) {
     let config = BaseConfig::new(matches);
     let client: Client = create_client(&config);
     let metadata = client
-        .fetch_metadata(None, Duration::from_millis(3000))
+        .fetch_metadata(None, config.timeout)
         .expect("Failed to fetch metadata");
     let brokers: Vec<Broker> = metadata.brokers().iter()
         .map(|broker| Broker::new(broker.id(), broker.host().to_string(), broker.port()))
@@ -490,7 +490,7 @@ fn evaluate_topic_result(topic: &String,
 fn show_topics(config: &TopicConfig) {
     let consumer: BaseConsumer = create_consumer(&config.base, None);
     let metadata = consumer
-        .fetch_metadata(None, Duration::from_millis(3000))
+        .fetch_metadata(None, config.base.timeout)
         .expect("Failed to fetch metadata");
     let mut rec_topics = Vec::<Topic>::new();
     let topics: Vec<&MetadataTopic> = match &config.topic {
@@ -533,11 +533,11 @@ fn cmd_groups(matches: &ArgMatches) {
     let config = GroupConfig::new(matches);
     let client: BaseConsumer = create_consumer(&config.base, None);
 
-    client.fetch_metadata(None, Duration::from_millis(3000))
+    client.fetch_metadata(None, config.base.timeout)
         .expect("Failed to fetch metadata");
 
     let group_list = client
-        .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), Duration::from_millis(3000))
+        .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), config.base.timeout)
         .expect("Failed to fetch group list");
     let mut rec_groups = Vec::<Group>::new();
 
@@ -564,10 +564,10 @@ fn cmd_offsets(matches: &ArgMatches) {
 fn show_offsets(config: &OffsetsConfig) {
     let client: BaseConsumer = create_consumer(&config.base, None);
     let metadata = client
-        .fetch_metadata(config.topic.as_ref().map(|topic| topic.as_str()), Duration::from_millis(3000))
+        .fetch_metadata(config.topic.as_ref().map(|topic| topic.as_str()), config.base.timeout)
         .expect("Failed to fetch metadata");
     let group_list = client
-        .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), Duration::from_millis(3000))
+        .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), config.base.timeout)
         .expect("Failed to fetch group list");
     let groups: Vec<String> = group_list.groups().iter().map(|group| group.name().to_string()).collect();
     let topics: Vec<&MetadataTopic> = metadata.topics().iter().collect();
@@ -584,7 +584,7 @@ fn show_offsets(config: &OffsetsConfig) {
             });
         });
 
-        let offsets = consumer.committed_offsets(topic_partitions, Duration::from_millis(3000)).expect("Failed to fetch offsets");
+        let offsets = consumer.committed_offsets(topic_partitions, config.base.timeout).expect("Failed to fetch offsets");
         let available_topics: HashSet<_> = offsets.elements().iter().map(|elem| elem.topic().to_string()).collect();
 
         for topic_name in available_topics {
@@ -615,7 +615,7 @@ fn alter_offsets(config: &OffsetsConfig) {
     let mut topic_partitions: TopicPartitionList = TopicPartitionList::new();
     let topic = config.topic.as_ref().unwrap();
     let offsets = config.offsets.as_ref().unwrap();
-    let metadata = client.fetch_metadata(Some(topic.as_str()), Duration::from_millis(3000))
+    let metadata = client.fetch_metadata(Some(topic.as_str()), config.base.timeout)
         .expect(format!("Failed to fetch metadata for topic {}", topic).as_str());
     let metadata_partitions: HashSet<i32> = metadata.topics().iter().flat_map(|t| t.partitions().iter().map(|p| p.id())).collect();
 

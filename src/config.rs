@@ -1,23 +1,25 @@
 use std::path::Path;
+use std::time::Duration;
 
 use clap::ArgMatches;
 
-use crate::args::{OP_ALTER, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, OP_CREATE, OP_DELETE, OP_DESCRIBE, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, OP_LIST, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TOPIC, ARG_WITH_OFFSETS};
+use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
     pub servers: Vec<String>,
     pub properties: Option<Vec<(String, String)>>,
+    pub timeout: Duration,
 }
 
 impl BaseConfig {
     pub fn new(matches: &ArgMatches) -> Self {
         let servers = matches.values_of(ARG_BOOTSTRAP_SERVER)
             .map(|v| v.map(|s| s.to_string()).collect::<Vec<String>>()).unwrap();
-
         let properties = BaseConfig::get_properties(matches);
+        let timeout = Duration::from_millis(matches.value_of(ARG_TIMEOUT).map(|s| parse_timeout(&s.to_string())).unwrap());
 
-        Self { servers, properties }
+        Self { servers, properties, timeout }
     }
 
     fn get_properties(matches: &ArgMatches) -> Option<Vec<(String, String)>> {
@@ -200,9 +202,9 @@ impl ConsumeConfig {
         let topic = matches.value_of(ARG_TOPIC).map(|s| s.to_string()).unwrap();
         let partitions_unsorted = matches.values_of(ARG_PARTITIONS)
             .map(|v| v.map(|s| parse_partition(&s.to_string()))
-                .collect::<Vec<i32>>()).unwrap_or(vec!(0));
+                .collect::<Vec<i32>>()).unwrap();
         let maybe_offsets_unsorted = matches.values_of(ARG_OFFSETS)
-            .map(|v| v.map(|s| parse_number(&s.to_string()))
+            .map(|v| v.map(|s| parse_offset(&s.to_string()))
                 .collect::<Vec<i64>>());
         let consumer_group = matches.value_of(ARG_CONSUMER_GROUP)
             .map(|s| s.to_string()).unwrap_or(DEFAULT_GROUP_ID.to_string());
@@ -276,6 +278,11 @@ fn parse_replication(str: &String) -> i32 {
 fn parse_number(str: &String) -> i64 {
     return str.parse::<i64>()
         .expect(format!("Invalid number: '{}'", str).as_str());
+}
+
+fn parse_timeout(str: &String) -> u64 {
+    return str.parse::<u64>()
+        .expect(format!("Invalid timeout: '{}'", str).as_str());
 }
 
 fn parse_count(str: &String) -> usize {
