@@ -1,4 +1,4 @@
-use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand, ArgGroup};
 
 pub const CMD_BROKERS: &'static str = "brokers";
 pub const CMD_TOPICS: &'static str = "topics";
@@ -20,6 +20,7 @@ pub const ARG_EXTRA_PROPERTIES_FILE: &'static str = "extra-properties-file";
 pub const ARG_WITH_OFFSETS: &'static str = "with-offsets";
 pub const ARG_TOPIC: &'static str = "topic";
 pub const ARG_OFFSETS: &'static str = "offsets";
+pub const ARG_EARLIEST: &'static str = "earliest";
 pub const ARG_PARTITIONS: &'static str = "partitions";
 pub const ARG_REPLICATION: &'static str = "replication";
 pub const ARG_CONSUMER_GROUP: &'static str = "consumer-group";
@@ -182,8 +183,13 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .short("o")
         .long(ARG_OFFSETS)
         .use_delimiter(true)
-        .value_name("OFFSETS")
-        .required(true);
+        .value_name("OFFSETS");
+
+    let arg_earliest = Arg::with_name(ARG_EARLIEST)
+        .help("Set offsets to earliest")
+        .short("e")
+        .long(ARG_EARLIEST)
+        .conflicts_with(ARG_OFFSETS);
 
     return App::new("Milena")
         .version(crate_version!())
@@ -228,7 +234,12 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
                 .arg(&arg_topic.clone().required(true))
                 .arg(&arg_group.clone().required(true))
                 .arg(&arg_partitions)
-                .arg(&arg_offsets_offsets))))
+                .arg(&arg_offsets_offsets)
+                .arg(arg_earliest)
+                .group(ArgGroup::with_name("offset")
+                    .arg(ARG_OFFSETS)
+                    .arg(ARG_EARLIEST)
+                    .required(true)))))
         .subcommand(add_global_args(SubCommand::with_name(CMD_CONFIG)
             .about("Display and alter topic configuration")
             .arg(&arg_topic)

@@ -614,7 +614,7 @@ fn alter_offsets(config: &OffsetsConfig) {
     let client: BaseConsumer = create_consumer(&config.base, Some(config.consumer_group.as_ref().unwrap().to_string()));
     let mut topic_partitions: TopicPartitionList = TopicPartitionList::new();
     let topic = config.topic.as_ref().unwrap();
-    let offsets = config.offsets.as_ref().unwrap();
+    let earliest = config.earliest;
     let metadata = client.fetch_metadata(Some(topic.as_str()), config.base.timeout)
         .expect(format!("Failed to fetch metadata for topic {}", topic).as_str());
     let metadata_partitions: HashSet<i32> = metadata.topics().iter().flat_map(|t| t.partitions().iter().map(|p| p.id())).collect();
@@ -622,26 +622,46 @@ fn alter_offsets(config: &OffsetsConfig) {
     if config.partitions.as_ref().is_some() {
         let partitions = config.partitions.as_ref().unwrap();
 
-        if partitions.len() != offsets.len() {
-            panic!("Number of provided partitions ({}) doesn't match number of offsets ({})",
-                   partitions.len(), offsets.len())
+        if earliest {
+            partitions.iter().for_each(|partition| {
+                let (low, _) = get_watermarks(&client, topic, *partition);
+
+                topic_partitions.add_partition_offset(topic.as_str(), *partition, Offset(low));
+            });
+        } else {
+            let offsets = config.offsets.as_ref().unwrap();
+
+            if partitions.len() != offsets.len() {
+                panic!("Number of provided partitions ({}) doesn't match number of offsets ({})",
+                       partitions.len(), offsets.len())
+            }
+
+            let partition_set = HashSet::from_iter(partitions.iter().cloned());
+            let difference: HashSet<_> = partition_set.difference(&metadata_partitions).collect();
+
+            if !difference.is_empty() {
+                panic!("Invalid partitions: {:?}", difference);
+            }
+
+            partitions.iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), *p, Offset(*o)));
         }
-
-        let partition_set = HashSet::from_iter(partitions.iter().cloned());
-        let difference: HashSet<_> = partition_set.difference(&metadata_partitions).collect();
-
-        if !difference.is_empty() {
-            panic!("Invalid partitions: {:?}", difference);
-        }
-
-        partitions.iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), *p, Offset(*o)));
     } else {
-        if metadata_partitions.len() != offsets.len() {
-            panic!("Number of offsets ({}) doesn't match number of partitions ({})",
-                   offsets.len(), metadata_partitions.len());
-        }
+        if earliest {
+            metadata_partitions.iter().for_each(|partition| {
+                let (low, _) = get_watermarks(&client, topic, *partition);
 
-        (0 as i32..offsets.len() as i32).into_iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), p, Offset(*o)))
+                topic_partitions.add_partition_offset(topic.as_str(), *partition, Offset(low));
+            });
+        } else {
+            let offsets = config.offsets.as_ref().unwrap();
+
+            if metadata_partitions.len() != offsets.len() {
+                panic!("Number of offsets ({}) doesn't match number of partitions ({})",
+                       offsets.len(), metadata_partitions.len());
+            }
+
+            (0 as i32..offsets.len() as i32).into_iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), p, Offset(*o)))
+        }
     }
 
     client.store_offsets(&topic_partitions).expect("Failed to store offsets");
