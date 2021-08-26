@@ -128,18 +128,26 @@ impl GroupOffsets {
 #[derive(Debug, Serialize)]
 struct TopicOffsets {
     name: String,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
     offsets: HashMap<i32, i64>,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    lags: HashMap<i32, i64>,
 }
 
 impl TopicOffsets {
     fn new(name: String) -> Self {
         let offsets = HashMap::<i32, i64>::new();
+        let lags = HashMap::<i32, i64>::new();
 
-        Self { name, offsets }
+        Self { name, offsets, lags }
     }
 
     fn add_offset(&mut self, partition: i32, offset: i64) {
         self.offsets.insert(partition, offset);
+    }
+
+    fn add_lag(&mut self, partition: i32, lag: i64) {
+        self.lags.insert(partition, lag);
     }
 }
 
@@ -592,12 +600,24 @@ fn show_offsets(config: &OffsetsConfig) {
 
             offsets.elements_for_topic(topic_name.as_str()).iter().for_each(|elem| {
                 match elem.offset() {
-                    Offset(offset) => topic_offsets.add_offset(elem.partition(), offset),
+                    Offset(offset) => {
+                        if config.lags {
+                            let (_, high) = consumer
+                                .fetch_watermarks(topic_name.as_str(), elem.partition(), Duration::from_secs(1))
+                                .unwrap_or((-1, -1));
+
+                            if high != -1 {
+                                topic_offsets.add_lag(elem.partition(), high - offset)
+                            }
+                        } else {
+                            topic_offsets.add_offset(elem.partition(), offset)
+                        }
+                    }
                     _ => ()
                 }
             });
 
-            if !topic_offsets.offsets.is_empty() {
+            if !topic_offsets.offsets.is_empty() || !topic_offsets.lags.is_empty() {
                 group_offsets.add_topic_offsets(topic_offsets)
             }
         }

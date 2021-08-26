@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 
-use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST, ARG_EARLIEST};
+use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST, ARG_EARLIEST, ARG_LAGS};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -101,6 +101,7 @@ pub struct OffsetsConfig {
     pub partitions: Option<Vec<i32>>,
     pub offsets: Option<Vec<i64>>,
     pub earliest: bool,
+    pub lags: bool,
 }
 
 impl OffsetsConfig {
@@ -127,6 +128,7 @@ impl OffsetsConfig {
             _ => None
         };
         let earliest = matches.is_present(ARG_EARLIEST);
+        let lags = matches.is_present(ARG_LAGS);
 
         Self {
             base,
@@ -136,6 +138,7 @@ impl OffsetsConfig {
             partitions,
             offsets,
             earliest,
+            lags,
         }
     }
 }

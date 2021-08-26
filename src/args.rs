@@ -21,6 +21,7 @@ pub const ARG_WITH_OFFSETS: &'static str = "with-offsets";
 pub const ARG_TOPIC: &'static str = "topic";
 pub const ARG_OFFSETS: &'static str = "offsets";
 pub const ARG_EARLIEST: &'static str = "earliest";
+pub const ARG_LAGS: &'static str = "lags";
 pub const ARG_PARTITIONS: &'static str = "partitions";
 pub const ARG_REPLICATION: &'static str = "replication";
 pub const ARG_CONSUMER_GROUP: &'static str = "consumer-group";
@@ -191,6 +192,11 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .long(ARG_EARLIEST)
         .conflicts_with(ARG_OFFSETS);
 
+    let arg_lags = Arg::with_name(ARG_LAGS)
+        .help("List lags instead of offsets")
+        .short("l")
+        .long(ARG_LAGS);
+
     return App::new("Milena")
         .version(crate_version!())
         .setting(AppSettings::GlobalVersion)
@@ -228,7 +234,8 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .subcommand(add_global_args(SubCommand::with_name(OP_LIST)
                 .about("List offsets")
                 .arg(&arg_topic)
-                .arg(&arg_group)))
+                .arg(&arg_group)
+                .arg(&arg_lags)))
             .subcommand(add_global_args(SubCommand::with_name(OP_ALTER)
                 .about("Alter offsets")
                 .arg(&arg_topic.clone().required(true))
