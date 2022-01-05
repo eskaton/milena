@@ -1,4 +1,4 @@
-use clap::{App, AppSettings, Arg, ArgMatches, SubCommand, ArgGroup};
+use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
 
 pub const CMD_BROKERS: &'static str = "brokers";
 pub const CMD_TOPICS: &'static str = "topics";
@@ -37,6 +37,7 @@ pub const ARG_NO_HEADERS: &'static str = "no-headers";
 pub const ARG_GET: &'static str = "get";
 pub const ARG_SET: &'static str = "set";
 pub const ARG_JSON_BATCH: &'static str = "json-batch";
+pub const ARG_BATCH_SIZE: &'static str = "batch-size";
 pub const ARG_TIMEOUT: &'static str = "timeout";
 
 fn add_global_args<'a>(app: App<'a, 'a>) -> App<'a, 'a> {
@@ -188,6 +189,12 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .requires_all(&[ARG_PAYLOAD_FILE])
         .conflicts_with_all(&[ARG_HEADERS, ARG_KEY, ARG_KEY_FILE]);
 
+    let arg_batch_size = Arg::with_name(ARG_BATCH_SIZE)
+        .help("The count of messages that is sent to the broker in one batch")
+        .long(ARG_BATCH_SIZE)
+        .value_name("COUNT")
+        .requires_all(&[ARG_JSON_BATCH]);
+
     let arg_offsets_offsets = Arg::with_name(ARG_OFFSETS)
         .help("A comma separated list of offsets")
         .short("o")
@@ -283,7 +290,8 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_key_file)
             .arg(&arg_payload_file)
             .arg(&arg_json_batch.clone()
-                .help("Treat the content of the payload file as a batch of serialized JSON messages including headers and keys"))))
+                .help("Treat the content of the payload file as a batch of serialized JSON messages including headers and keys")))
+            .arg(&arg_batch_size))
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches_from(args);
 }

@@ -825,9 +825,11 @@ fn cmd_produce(matches: &ArgMatches) {
     let producer = create_producer(&config.base);
     let payload = &config.payload_file.as_ref().map(|f| read_to_string(f).unwrap());
     let json_batch = config.json_batch;
+    let batch_size = config.batch_size.unwrap_or(128);
 
     if json_batch && payload.is_some() {
         let messages: Vec<ConsumedMessage> = serde_json::from_str(payload.as_ref().unwrap().as_str()).unwrap();
+        let mut count: usize = 0;
 
         for message in messages.iter() {
             let msg_payload = message.payload.as_ref().map(|s| s.to_string());
@@ -840,6 +842,12 @@ fn cmd_produce(matches: &ArgMatches) {
             }
 
             send_message(&config, &producer, &msg_payload, &msg_key, &headers);
+
+            count = count + 1;
+
+            if count % batch_size == 0 {
+                producer.flush(Duration::new(30, 0));
+            }
         }
     } else {
         let mut headers = OwnedHeaders::new();

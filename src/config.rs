@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 
-use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST, ARG_EARLIEST, ARG_LAGS, ARG_PARTITION};
+use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LAGS, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -305,6 +305,7 @@ pub struct ProduceConfig {
     pub payload_file: Option<String>,
     pub headers: Vec<(String, String)>,
     pub json_batch: bool,
+    pub batch_size: Option<usize>,
 }
 
 impl ProduceConfig {
@@ -323,6 +324,7 @@ impl ProduceConfig {
                 headers.push(split_name_value_pair("header", hs))));
 
         let json_batch = matches.is_present(ARG_JSON_BATCH);
+        let batch_size = matches.value_of(ARG_BATCH_SIZE).map(|s| parse_count(&s.to_string()));
 
         Self {
             base,
@@ -333,6 +335,7 @@ impl ProduceConfig {
             payload_file,
             headers,
             json_batch,
+            batch_size,
         }
     }
 }
