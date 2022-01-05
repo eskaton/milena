@@ -827,13 +827,13 @@ fn cmd_produce(matches: &ArgMatches) {
     let json_batch = config.json_batch;
 
     if json_batch && payload.is_some() {
-        let mut headers = OwnedHeaders::new();
         let messages: Vec<ConsumedMessage> = serde_json::from_str(payload.as_ref().unwrap().as_str()).unwrap();
 
         for message in messages.iter() {
             let msg_payload = message.payload.as_ref().map(|s| s.to_string());
             let msg_headers = message.headers.as_ref().unwrap();
             let msg_key = message.key.as_ref().map(|s| s.as_bytes().to_owned());
+            let mut headers = OwnedHeaders::new();
 
             for header in msg_headers {
                 headers = headers.add(header.key.as_str(), &header.value.to_string());
