@@ -23,6 +23,7 @@ pub const ARG_OFFSETS: &'static str = "offsets";
 pub const ARG_EARLIEST: &'static str = "earliest";
 pub const ARG_LAGS: &'static str = "lags";
 pub const ARG_PARTITIONS: &'static str = "partitions";
+pub const ARG_PARTITION: &'static str = "partition";
 pub const ARG_REPLICATION: &'static str = "replication";
 pub const ARG_CONSUMER_GROUP: &'static str = "consumer-group";
 pub const ARG_FOLLOW: &'static str = "follow";
@@ -104,6 +105,12 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .long(ARG_PARTITIONS)
         .use_delimiter(true)
         .value_name("PARTITIONS");
+
+    let arg_partition = Arg::with_name(ARG_PARTITION)
+        .help("A partition number")
+        .short("p")
+        .long(ARG_PARTITION)
+        .value_name("PARTITION");
 
     let arg_offsets = Arg::with_name(ARG_OFFSETS)
         .help("A comma separated list of offsets")
@@ -268,6 +275,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .subcommand(add_global_args(SubCommand::with_name(CMD_PRODUCE)
             .about("Produce to a topic")
             .arg(&arg_topic.clone().required(true))
+            .arg(&arg_partition)
             .arg(&arg_headers)
             .arg(&arg_key)
             .arg(&arg_key_file)

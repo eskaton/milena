@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 
-use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST, ARG_EARLIEST, ARG_LAGS};
+use crate::args::{ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST, ARG_EARLIEST, ARG_LAGS, ARG_PARTITION};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -299,6 +299,7 @@ fn parse_count(str: &String) -> usize {
 pub struct ProduceConfig {
     pub base: BaseConfig,
     pub topic: String,
+    pub partition: Option<i32>,
     pub key: Option<String>,
     pub key_file: Option<String>,
     pub payload_file: Option<String>,
@@ -310,6 +311,7 @@ impl ProduceConfig {
     pub fn new(matches: &ArgMatches) -> Self {
         let base = BaseConfig::new(matches);
         let topic = matches.value_of(ARG_TOPIC).map(|s| s.to_string()).unwrap();
+        let partition = matches.value_of(ARG_PARTITION).map(|s| parse_partition(&s.to_string()));
         let key = matches.value_of(ARG_KEY).map(|s| s.to_string());
         let key_file = matches.value_of(ARG_KEY_FILE).map(|s| s.to_string());
         let payload_file = matches.value_of(ARG_PAYLOAD_FILE).map(|s| s.to_string());
@@ -325,6 +327,7 @@ impl ProduceConfig {
         Self {
             base,
             topic,
+            partition,
             key,
             key_file,
             payload_file,

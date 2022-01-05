@@ -864,6 +864,10 @@ fn send_message(config: &ProduceConfig,
     let mut record = BaseRecord::<Vec<u8>, String, Box<Option<Vec<u8>>>>::with_opaque_to(
         &config.topic, delivery_opaque).headers(headers.clone());
 
+    if config.partition.is_some() {
+        record = record.partition(config.partition.unwrap());
+    }
+
     if key.is_some() {
         record = record.key(key.as_ref().unwrap());
     }
