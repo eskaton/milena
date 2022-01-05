@@ -184,7 +184,9 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .requires_all(&[ARG_TOPIC]);
 
     let arg_json_batch = Arg::with_name(ARG_JSON_BATCH)
-        .long(ARG_JSON_BATCH);
+        .long(ARG_JSON_BATCH)
+        .requires_all(&[ARG_PAYLOAD_FILE])
+        .conflicts_with_all(&[ARG_HEADERS, ARG_KEY, ARG_KEY_FILE]);
 
     let arg_offsets_offsets = Arg::with_name(ARG_OFFSETS)
         .help("A comma separated list of offsets")
@@ -281,7 +283,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_key_file)
             .arg(&arg_payload_file)
             .arg(&arg_json_batch.clone()
-                .help("Treat the content of the payload file as a batch of serialized JSON messages"))))
+                .help("Treat the content of the payload file as a batch of serialized JSON messages including headers and keys"))))
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches_from(args);
 }
