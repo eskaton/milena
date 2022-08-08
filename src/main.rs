@@ -808,7 +808,10 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
             None => None
         }
     };
-    let key = message.key().map(|k| String::from_utf8_lossy(k));
+    let key = match config.no_key {
+        true => None,
+        false => message.key().map(|k| String::from_utf8_lossy(k))
+    };
 
     if config.key_regex.is_some() {
         if key.is_none() {
