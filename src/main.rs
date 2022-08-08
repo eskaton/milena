@@ -815,7 +815,10 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
         }
     }
 
-    let payload = message.payload().map(|p| String::from_utf8_lossy(p));
+    let payload= match config.no_payload{
+        true => None,
+        false => message.payload().map(|p| String::from_utf8_lossy(p))
+    };
 
     Some(ConsumedMessage::new(timestamp, key, payload, headers))
 }
