@@ -1,4 +1,4 @@
-use clap::{App, AppSettings, Arg, ArgGroup, ArgMatches, SubCommand};
+use clap::{Command, AppSettings, Arg, ArgGroup, ArgMatches};
 
 pub const CMD_BROKERS: &'static str = "brokers";
 pub const CMD_TOPICS: &'static str = "topics";
@@ -46,10 +46,10 @@ pub const ARG_JSON_BATCH: &'static str = "json-batch";
 pub const ARG_BATCH_SIZE: &'static str = "batch-size";
 pub const ARG_TIMEOUT: &'static str = "timeout";
 
-fn add_global_args<'a>(app: App<'a, 'a>) -> App<'a, 'a> {
+fn add_global_args(app: Command) -> Command {
     let arg_servers: Arg = Arg::with_name(ARG_BOOTSTRAP_SERVER)
         .help("The bootstrap servers")
-        .short("b")
+        .short('b')
         .long(ARG_BOOTSTRAP_SERVER)
         .value_name("SERVERS")
         .use_delimiter(true)
@@ -57,7 +57,7 @@ fn add_global_args<'a>(app: App<'a, 'a>) -> App<'a, 'a> {
 
     let arg_extra_properties = Arg::with_name(ARG_EXTRA_PROPERTIES)
         .help("Additional properties to pass to librdkafka")
-        .short("x")
+        .short('x')
         .long(ARG_EXTRA_PROPERTIES)
         .value_name("PROPERTIES")
         .use_delimiter(true)
@@ -66,13 +66,13 @@ fn add_global_args<'a>(app: App<'a, 'a>) -> App<'a, 'a> {
     let arg_extra_properties_file = Arg::with_name(ARG_EXTRA_PROPERTIES_FILE)
         .help("A file containing additional properties to pass to librdkafka")
         .long(ARG_EXTRA_PROPERTIES_FILE)
-        .short("X")
+        .short('X')
         .value_name("PROPERTIES_FILE")
         .conflicts_with(ARG_EXTRA_PROPERTIES);
 
     let arg_timeout = Arg::with_name(ARG_TIMEOUT)
         .help("Timeout in milliseconds")
-        .short("T")
+        .short('T')
         .long(ARG_TIMEOUT)
         .value_name("TIMEOUT")
         .default_value("3000");
@@ -90,51 +90,51 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
 
     let arg_topic = Arg::with_name(ARG_TOPIC)
         .help("A topic name")
-        .short("t")
+        .short('t')
         .long(ARG_TOPIC)
         .value_name("TOPIC");
 
     let arg_topic_partitions = Arg::with_name(ARG_PARTITIONS)
         .help("Number of partitions")
         .long(ARG_PARTITIONS)
-        .short("p")
+        .short('p')
         .value_name("PARTITIONS");
 
     let arg_replication = Arg::with_name(ARG_REPLICATION)
         .help("Replication factor")
         .long(ARG_REPLICATION)
-        .short("r")
+        .short('r')
         .value_name("REPLICATION");
 
     let arg_partitions = Arg::with_name(ARG_PARTITIONS)
         .help("A comma separated list of partition numbers")
-        .short("p")
+        .short('p')
         .long(ARG_PARTITIONS)
         .use_delimiter(true)
         .value_name("PARTITIONS");
 
     let arg_partition = Arg::with_name(ARG_PARTITION)
         .help("A partition number")
-        .short("p")
+        .short('p')
         .long(ARG_PARTITION)
         .value_name("PARTITION");
 
     let arg_offsets = Arg::with_name(ARG_OFFSETS)
         .help("A comma separated list of offsets")
-        .short("o")
+        .short('o')
         .long(ARG_OFFSETS)
         .use_delimiter(true)
         .value_name("OFFSETS");
 
     let arg_group = Arg::with_name(ARG_CONSUMER_GROUP)
         .help("A consumer group")
-        .short("g")
+        .short('g')
         .long(ARG_CONSUMER_GROUP)
         .value_name("GROUP_ID");
 
     let arg_follow = Arg::with_name(ARG_FOLLOW)
         .help("Follow the topic")
-        .short("f")
+        .short('f')
         .long(ARG_FOLLOW)
         .conflicts_with(ARG_COUNT);
 
@@ -212,15 +212,21 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
     let arg_set = Arg::with_name(ARG_SET)
         .help("Set configuration values. Takes a list of comma separated name=value pairs")
         .long(ARG_SET)
-        .value_delimiter(",")
+        .value_delimiter(',')
         .value_name("CONFIG")
         .conflicts_with(ARG_GET)
         .requires_all(&[ARG_TOPIC]);
 
-    let arg_json_batch = Arg::with_name(ARG_JSON_BATCH)
+    let arg_json_batch_consumer = Arg::with_name(ARG_JSON_BATCH)
+        .long(ARG_JSON_BATCH)
+        .conflicts_with(ARG_FOLLOW)
+        .help("Consume all messages and serialize them as a batch of JSON messages");
+
+    let arg_json_batch_producer = Arg::with_name(ARG_JSON_BATCH)
         .long(ARG_JSON_BATCH)
         .requires_all(&[ARG_PAYLOAD_FILE])
-        .conflicts_with_all(&[ARG_HEADERS, ARG_KEY, ARG_KEY_FILE]);
+        .conflicts_with_all(&[ARG_HEADERS, ARG_KEY, ARG_KEY_FILE])
+        .help("Treat the content of the payload file as a batch of serialized JSON messages including headers and keys");
 
     let arg_batch_size = Arg::with_name(ARG_BATCH_SIZE)
         .help("The count of messages that is sent to the broker in one batch")
@@ -230,62 +236,61 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
 
     let arg_offsets_offsets = Arg::with_name(ARG_OFFSETS)
         .help("A comma separated list of offsets")
-        .short("o")
+        .short('o')
         .long(ARG_OFFSETS)
         .use_delimiter(true)
         .value_name("OFFSETS");
 
     let arg_earliest = Arg::with_name(ARG_EARLIEST)
         .help("Set offsets to earliest")
-        .short("e")
+        .short('e')
         .long(ARG_EARLIEST)
         .conflicts_with(ARG_OFFSETS);
 
     let arg_lags = Arg::with_name(ARG_LAGS)
         .help("List lags instead of offsets")
-        .short("l")
+        .short('l')
         .long(ARG_LAGS);
 
-    return App::new("Milena")
+    return Command::new("Milena")
         .version(crate_version!())
-        .setting(AppSettings::GlobalVersion)
-        .setting(AppSettings::VersionlessSubcommands)
-        .subcommand(add_global_args(SubCommand::with_name(CMD_BROKERS)
+        .propagate_version(false)
+        .subcommand(add_global_args(Command::new(CMD_BROKERS)
             .about("Display information about the brokers")))
-        .subcommand(SubCommand::with_name(CMD_TOPICS)
+        .subcommand(Command::new(CMD_TOPICS)
             .about("Manage topics")
             .setting(AppSettings::SubcommandRequiredElseHelp)
-            .subcommand(add_global_args(SubCommand::with_name(OP_LIST)
+            .subcommand(add_global_args(Command::new(OP_LIST)
                 .about("List topics")
                 .arg(&arg_topic)))
-            .subcommand(add_global_args(SubCommand::with_name(OP_DESCRIBE)
+            .subcommand(add_global_args(Command::new(OP_DESCRIBE)
                 .about("Describe topics")
                 .arg(&arg_topic)
                 .arg(&arg_with_offsets)))
-            .subcommand(add_global_args(SubCommand::with_name(OP_CREATE)
+            .subcommand(add_global_args(Command::new(OP_CREATE)
                 .about("Create a topic")
                 .arg(&arg_topic.clone().required(true))
                 .arg(&arg_topic_partitions)
                 .arg(&arg_replication)))
-            .subcommand(add_global_args(SubCommand::with_name(OP_DELETE)
+            .subcommand(add_global_args(Command::new(OP_DELETE)
                 .about("Delete a topic")
                 .arg(&arg_topic.clone().required(true))))
-            .subcommand(add_global_args(SubCommand::with_name(OP_ALTER)
+            .subcommand(add_global_args(Command::new(OP_ALTER)
                 .about("Alter a topic")
                 .arg(&arg_topic.clone().required(true))
                 .arg(&arg_topic_partitions))))
-        .subcommand(add_global_args(SubCommand::with_name(CMD_GROUPS)
+        .subcommand(add_global_args(Command::new(CMD_GROUPS)
             .about("Display information about groups")
             .arg(&arg_group)))
-        .subcommand(SubCommand::with_name(CMD_OFFSETS)
+        .subcommand(Command::new(CMD_OFFSETS)
             .about("Display and alter offsets")
             .setting(AppSettings::SubcommandRequiredElseHelp)
-            .subcommand(add_global_args(SubCommand::with_name(OP_LIST)
+            .subcommand(add_global_args(Command::new(OP_LIST)
                 .about("List offsets")
                 .arg(&arg_topic)
                 .arg(&arg_group)
                 .arg(&arg_lags)))
-            .subcommand(add_global_args(SubCommand::with_name(OP_ALTER)
+            .subcommand(add_global_args(Command::new(OP_ALTER)
                 .about("Alter offsets")
                 .arg(&arg_topic.clone().required(true))
                 .arg(&arg_group.clone().required(true))
@@ -296,12 +301,12 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
                     .arg(ARG_OFFSETS)
                     .arg(ARG_EARLIEST)
                     .required(true)))))
-        .subcommand(add_global_args(SubCommand::with_name(CMD_CONFIG)
+        .subcommand(add_global_args(Command::new(CMD_CONFIG)
             .about("Display and alter topic configuration")
             .arg(&arg_topic)
             .arg(&arg_set)
             .arg(&arg_get)))
-        .subcommand(add_global_args(SubCommand::with_name(CMD_CONSUME)
+        .subcommand(add_global_args(Command::new(CMD_CONSUME)
             .about("Consume from a topic")
             .arg(&arg_topic.clone().required(true))
             .arg(&arg_partitions.clone().default_value("0"))
@@ -317,10 +322,8 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_timestamp_before)
             .arg(&arg_timestamp_after)
             .arg(&arg_key_regex)
-            .arg(&arg_json_batch.clone()
-                .conflicts_with(ARG_FOLLOW)
-                .help("Consume all messages and serialize them as a batch of JSON messages"))))
-        .subcommand(add_global_args(SubCommand::with_name(CMD_PRODUCE)
+            .arg(&arg_json_batch_consumer)))
+        .subcommand(add_global_args(Command::new(CMD_PRODUCE)
             .about("Produce to a topic")
             .arg(&arg_topic.clone().required(true))
             .arg(&arg_partition)
@@ -328,8 +331,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_key)
             .arg(&arg_key_file)
             .arg(&arg_payload_file)
-            .arg(&arg_json_batch.clone()
-                .help("Treat the content of the payload file as a batch of serialized JSON messages including headers and keys")))
+            .arg(&arg_json_batch_producer))
             .arg(&arg_batch_size))
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches_from(args);

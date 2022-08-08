@@ -1,4 +1,4 @@
-#[macro_use]
+#[macro_use(crate_version)]
 extern crate clap;
 
 use std::borrow::{Borrow, Cow};
@@ -956,13 +956,13 @@ fn main() {
     let matches = parse_args(&args);
 
     match matches.subcommand() {
-        (CMD_BROKERS, Some(matches)) => cmd_brokers(&matches),
-        (CMD_TOPICS, Some(matches)) => cmd_topics(&matches),
-        (CMD_GROUPS, Some(matches)) => cmd_groups(&matches),
-        (CMD_OFFSETS, Some(matches)) => cmd_offsets(&matches),
-        (CMD_CONFIG, Some(matches)) => cmd_config(&matches),
-        (CMD_CONSUME, Some(matches)) => cmd_consume(&matches),
-        (CMD_PRODUCE, Some(matches)) => cmd_produce(&matches),
+        Some((CMD_BROKERS, matches)) => cmd_brokers(&matches),
+        Some((CMD_TOPICS, matches)) => cmd_topics(&matches),
+        Some((CMD_GROUPS, matches)) => cmd_groups(&matches),
+        Some((CMD_OFFSETS, matches)) => cmd_offsets(&matches),
+        Some((CMD_CONFIG, matches)) => cmd_config(&matches),
+        Some((CMD_CONSUME, matches)) => cmd_consume(&matches),
+        Some((CMD_PRODUCE, matches)) => cmd_produce(&matches),
         _ => {}
     };
 }

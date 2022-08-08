@@ -115,9 +115,9 @@ pub struct OffsetsConfig {
 impl OffsetsConfig {
     pub fn new(matches: &ArgMatches) -> Self {
         let (matches, mode) = match matches.subcommand() {
-            (OP_LIST, Some(matches)) => (matches, OffsetMode::LIST),
-            (OP_ALTER, Some(matches)) => (matches, OffsetMode::ALTER),
-            (cmd, _) => panic!("Invalid subcommand {}", cmd)
+            Some((OP_LIST, matches)) => (matches, OffsetMode::LIST),
+            Some((OP_ALTER, matches)) => (matches, OffsetMode::ALTER),
+            _ => panic!("Invalid subcommand")
         };
 
         let base = BaseConfig::new(matches);
@@ -172,12 +172,12 @@ pub struct TopicConfig {
 impl TopicConfig {
     pub fn new(matches: &ArgMatches) -> Self {
         let (matches, mode) = match matches.subcommand() {
-            (OP_LIST, Some(matches)) => (matches, TopicMode::LIST),
-            (OP_DESCRIBE, Some(matches)) => (matches, TopicMode::DESCRIBE),
-            (OP_ALTER, Some(matches)) => (matches, TopicMode::ALTER),
-            (OP_CREATE, Some(matches)) => (matches, TopicMode::CREATE),
-            (OP_DELETE, Some(matches)) => (matches, TopicMode::DELETE),
-            (cmd, _) => panic!("Invalid subcommand {}", cmd)
+            Some((OP_LIST, matches)) => (matches, TopicMode::LIST),
+            Some((OP_DESCRIBE, matches)) => (matches, TopicMode::DESCRIBE),
+            Some((OP_ALTER, matches)) => (matches, TopicMode::ALTER),
+            Some((OP_CREATE, matches)) => (matches, TopicMode::CREATE),
+            Some((OP_DELETE, matches)) => (matches, TopicMode::DELETE),
+            _ => panic!("Invalid subcommand")
         };
 
         let base = BaseConfig::new(matches);
