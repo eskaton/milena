@@ -34,6 +34,7 @@ pub const ARG_KEY: &'static str = "key";
 pub const ARG_KEY_FILE: &'static str = "key-file";
 pub const ARG_HEADERS: &'static str = "headers";
 pub const ARG_NO_HEADERS: &'static str = "no-headers";
+pub const ARG_KEY_REGEX: &'static str = "key-regex";
 pub const ARG_GET: &'static str = "get";
 pub const ARG_SET: &'static str = "set";
 pub const ARG_JSON_BATCH: &'static str = "json-batch";
@@ -170,6 +171,11 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .help("Exclude headers")
         .long(ARG_NO_HEADERS);
 
+    let arg_key_regex = Arg::with_name(ARG_KEY_REGEX)
+        .help("Regular expression to filter messages by key")
+        .long(ARG_KEY_REGEX)
+        .value_name("REGEX");
+
     let arg_get = Arg::with_name(ARG_GET)
         .help("Get configuration values")
         .long(ARG_GET)
@@ -278,6 +284,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_tail)
             .arg(&arg_count)
             .arg(&arg_no_headers)
+            .arg(&arg_key_regex)
             .arg(&arg_json_batch.clone()
                 .conflicts_with(ARG_FOLLOW)
                 .help("Consume all messages and serialize them as a batch of JSON messages"))))

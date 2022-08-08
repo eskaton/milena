@@ -715,7 +715,13 @@ fn cmd_consume(matches: &ArgMatches) {
 
         match consumer.poll(timeout) {
             Some(result) => {
-                let message = handle_fetch_result(&config, &result);
+                let opt_message = handle_fetch_result(&config, &result);
+
+                if opt_message.is_none() {
+                    continue
+                }
+
+                let message = opt_message.unwrap();
 
                 if json_batch {
                     let key = message.key.map(|s| Cow::from(Cow::into_owned(s)));
@@ -785,7 +791,7 @@ fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> (i
     (low, high)
 }
 
-fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> ConsumedMessage<'a> {
+fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> Option<ConsumedMessage<'a>> {
     if result.as_ref().is_err() {
         panic!("Poll failed with error: {}", result.as_ref().err().unwrap())
     }
@@ -800,9 +806,18 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
         None => None
     };
     let key = message.key().map(|k| String::from_utf8_lossy(k));
+
+    if config.key_regex.is_some() {
+        if key.is_none() {
+            return None
+        } else if !config.key_regex.as_ref().unwrap().is_match(key.as_ref().unwrap().as_ref()) {
+            return None
+        }
+    }
+
     let payload = message.payload().map(|p| String::from_utf8_lossy(p));
 
-    ConsumedMessage::new(timestamp, key, payload, headers)
+    Some(ConsumedMessage::new(timestamp, key, payload, headers))
 }
 
 fn get_headers(borrowed_headers: &BorrowedHeaders) -> Vec<Header> {

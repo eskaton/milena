@@ -2,8 +2,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use clap::ArgMatches;
+use regex::Regex;
 
-use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_LAGS, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
+use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_NO_HEADERS, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -200,6 +201,7 @@ pub struct ConsumeConfig {
     pub tail: Option<i64>,
     pub count: Option<usize>,
     pub json_batch: bool,
+    pub key_regex: Option<Regex>,
 }
 
 impl ConsumeConfig {
@@ -225,6 +227,7 @@ impl ConsumeConfig {
             false => None
         };
         let json_batch = matches.is_present(ARG_JSON_BATCH);
+        let key_regex = matches.value_of(ARG_KEY_REGEX).map(|s| Regex::new(s).unwrap());
 
         assert!(count.unwrap_or(1) > 0, "count must be > 0");
 
@@ -262,6 +265,7 @@ impl ConsumeConfig {
             tail,
             count,
             json_batch,
+            key_regex,
         }
     }
 }
