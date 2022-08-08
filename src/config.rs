@@ -4,7 +4,12 @@ use std::time::Duration;
 use clap::ArgMatches;
 use regex::Regex;
 
-use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_NO_HEADERS, ARG_NO_PAYLOAD, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
+use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST,
+                  ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS,
+                  ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_NO_HEADERS,
+                  ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS,
+                  ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TOPIC,
+                  ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -198,6 +203,7 @@ pub struct ConsumeConfig {
     pub consumer_group: String,
     pub follow: bool,
     pub no_headers: bool,
+    pub no_timestamp: bool,
     pub no_payload: bool,
     pub tail: Option<i64>,
     pub count: Option<usize>,
@@ -219,6 +225,7 @@ impl ConsumeConfig {
             .map(|s| s.to_string()).unwrap_or(DEFAULT_GROUP_ID.to_string());
         let follow = matches.is_present(ARG_FOLLOW);
         let no_headers = matches.is_present(ARG_NO_HEADERS);
+        let no_timestamp = matches.is_present(ARG_NO_TIMESTAMP);
         let no_payload = matches.is_present(ARG_NO_PAYLOAD);
         let tail = match matches.is_present(ARG_TAIL) {
             true => Some(matches.value_of(ARG_TAIL).map(|s| parse_number(&s.to_string())).unwrap()),
@@ -264,6 +271,7 @@ impl ConsumeConfig {
             consumer_group,
             follow,
             no_headers,
+            no_timestamp,
             no_payload,
             tail,
             count,

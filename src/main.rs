@@ -718,7 +718,7 @@ fn cmd_consume(matches: &ArgMatches) {
                 let opt_message = handle_fetch_result(&config, &result);
 
                 if opt_message.is_none() {
-                    continue
+                    continue;
                 }
 
                 let message = opt_message.unwrap();
@@ -801,21 +801,24 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
         true => None,
         false => message.headers().map(|h| get_headers(h))
     };
-    let timestamp = match message.timestamp().to_millis() {
-        Some(_) => Some(Timestamp::new(message.timestamp())),
-        None => None
+    let timestamp = match config.no_timestamp {
+        true => None,
+        false => match message.timestamp().to_millis() {
+            Some(_) => Some(Timestamp::new(message.timestamp())),
+            None => None
+        }
     };
     let key = message.key().map(|k| String::from_utf8_lossy(k));
 
     if config.key_regex.is_some() {
         if key.is_none() {
-            return None
+            return None;
         } else if !config.key_regex.as_ref().unwrap().is_match(key.as_ref().unwrap().as_ref()) {
-            return None
+            return None;
         }
     }
 
-    let payload= match config.no_payload{
+    let payload = match config.no_payload {
         true => None,
         false => message.payload().map(|p| String::from_utf8_lossy(p))
     };

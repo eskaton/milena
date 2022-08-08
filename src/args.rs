@@ -34,6 +34,7 @@ pub const ARG_KEY: &'static str = "key";
 pub const ARG_KEY_FILE: &'static str = "key-file";
 pub const ARG_HEADERS: &'static str = "headers";
 pub const ARG_NO_HEADERS: &'static str = "no-headers";
+pub const ARG_NO_TIMESTAMP: &'static str = "no-timestamp";
 pub const ARG_NO_PAYLOAD: &'static str = "no-payload";
 pub const ARG_KEY_REGEX: &'static str = "key-regex";
 pub const ARG_GET: &'static str = "get";
@@ -172,6 +173,10 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .help("Exclude headers")
         .long(ARG_NO_HEADERS);
 
+    let arg_no_timestamp = Arg::with_name(ARG_NO_TIMESTAMP)
+        .help("Exclude timestamp")
+        .long(ARG_NO_TIMESTAMP);
+
     let arg_no_payload = Arg::with_name(ARG_NO_PAYLOAD)
         .help("Exclude payload")
         .long(ARG_NO_PAYLOAD);
@@ -289,6 +294,7 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_tail)
             .arg(&arg_count)
             .arg(&arg_no_headers)
+            .arg(&arg_no_timestamp)
             .arg(&arg_no_payload)
             .arg(&arg_key_regex)
             .arg(&arg_json_batch.clone()
