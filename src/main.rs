@@ -808,6 +808,27 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
             None => None
         }
     };
+
+    if config.timestamp_before.is_some() {
+        if timestamp.is_none() {
+            return None
+        } else {
+            if config.timestamp_before.unwrap() <= timestamp.as_ref().unwrap().time.timestamp_nanos() {
+                return None
+            }
+        }
+    }
+
+    if config.timestamp_after.is_some() {
+        if timestamp.is_none() {
+            return None
+        } else {
+            if config.timestamp_after.unwrap() >= timestamp.as_ref().unwrap().time.timestamp_nanos() {
+                return None
+            }
+        }
+    }
+
     let key = match config.no_key {
         true => None,
         false => message.key().map(|k| String::from_utf8_lossy(k))
@@ -815,9 +836,9 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
 
     if config.key_regex.is_some() {
         if key.is_none() {
-            return None;
+            return None
         } else if !config.key_regex.as_ref().unwrap().is_match(key.as_ref().unwrap().as_ref()) {
-            return None;
+            return None
         }
     }
 

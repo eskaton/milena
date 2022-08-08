@@ -38,6 +38,8 @@ pub const ARG_NO_TIMESTAMP: &'static str = "no-timestamp";
 pub const ARG_NO_KEY: &'static str = "no-key";
 pub const ARG_NO_PAYLOAD: &'static str = "no-payload";
 pub const ARG_KEY_REGEX: &'static str = "key-regex";
+pub const ARG_TIMESTAMP_BEFORE: &'static str = "timestamp-before";
+pub const ARG_TIMESTAMP_AFTER: &'static str = "timestamp-after";
 pub const ARG_GET: &'static str = "get";
 pub const ARG_SET: &'static str = "set";
 pub const ARG_JSON_BATCH: &'static str = "json-batch";
@@ -186,6 +188,16 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .help("Exclude payload")
         .long(ARG_NO_PAYLOAD);
 
+    let arg_timestamp_before = Arg::with_name(ARG_TIMESTAMP_BEFORE)
+        .help("filter messages with a timestamp before TIMESTAMP")
+        .long(ARG_TIMESTAMP_BEFORE)
+        .value_name("TIMESTAMP");
+
+    let arg_timestamp_after = Arg::with_name(ARG_TIMESTAMP_AFTER)
+        .help("filter messages with a timestamp after TIMESTAMP")
+        .long(ARG_TIMESTAMP_AFTER)
+        .value_name("TIMESTAMP");
+
     let arg_key_regex = Arg::with_name(ARG_KEY_REGEX)
         .help("Regular expression to filter messages by key")
         .long(ARG_KEY_REGEX)
@@ -302,6 +314,8 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_no_timestamp)
             .arg(&arg_no_key)
             .arg(&arg_no_payload)
+            .arg(&arg_timestamp_before)
+            .arg(&arg_timestamp_after)
             .arg(&arg_key_regex)
             .arg(&arg_json_batch.clone()
                 .conflicts_with(ARG_FOLLOW)

@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
+use chrono::DateTime;
 use clap::ArgMatches;
 use regex::Regex;
 
@@ -9,7 +10,8 @@ use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_
                   ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_NO_HEADERS,
                   ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION,
                   ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT,
-                  ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
+                  ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER,
+                  OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -210,6 +212,8 @@ pub struct ConsumeConfig {
     pub count: Option<usize>,
     pub json_batch: bool,
     pub key_regex: Option<Regex>,
+    pub timestamp_before: Option<i64>,
+    pub timestamp_after: Option<i64>,
 }
 
 impl ConsumeConfig {
@@ -239,8 +243,14 @@ impl ConsumeConfig {
         };
         let json_batch = matches.is_present(ARG_JSON_BATCH);
         let key_regex = matches.value_of(ARG_KEY_REGEX).map(|s| Regex::new(s).unwrap());
+        let timestamp_before = matches.value_of(ARG_TIMESTAMP_BEFORE).map(|s| parse_timestamp(s));
+        let timestamp_after = matches.value_of(ARG_TIMESTAMP_AFTER).map(|s| parse_timestamp(s));
 
         assert!(count.unwrap_or(1) > 0, "count must be > 0");
+
+        if timestamp_before.is_some() && timestamp_after.is_some() {
+            assert!(timestamp_after.unwrap() - timestamp_before.unwrap() > 0, "the timestamps are overlapping");
+        }
 
         let mut partitions_sorted: Vec<i32>;
         let offsets_sorted: Option<Vec<i64>>;
@@ -280,8 +290,16 @@ impl ConsumeConfig {
             count,
             json_batch,
             key_regex,
+            timestamp_before,
+            timestamp_after,
         }
     }
+}
+
+fn parse_timestamp(s: &str) -> i64 {
+    return DateTime::parse_from_rfc3339(s)
+        .expect(format!("Invalid ISO-8601 timestamp: '{}'", s).as_str())
+        .timestamp_nanos();
 }
 
 fn parse_partition(str: &String) -> i32 {
