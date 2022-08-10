@@ -7,6 +7,7 @@ edition = "2021"
 [dependencies]
 rdkafka = { version = "0.24.0", features = ["gssapi"] }
 clap = { version= "3.2.16", features = ["cargo"] }
+clap_complete = "3.2.3"
 serde_json = "1.0.61"
 dotproperties = "0.1.0"
 serde = { version = "1.0.118", features = ["derive"] }

@@ -1,4 +1,5 @@
-use clap::{Command, AppSettings, Arg, ArgGroup, ArgMatches};
+use clap::{AppSettings, Arg, ArgGroup, Command};
+use clap_complete::Shell;
 
 pub const CMD_BROKERS: &'static str = "brokers";
 pub const CMD_TOPICS: &'static str = "topics";
@@ -14,6 +15,7 @@ pub const OP_CREATE: &'static str = "create";
 pub const OP_DELETE: &'static str = "delete";
 pub const OP_ALTER: &'static str = "alter";
 
+pub const ARG_COMPLETIONS: &'static str = "completions";
 pub const ARG_BOOTSTRAP_SERVER: &'static str = "bootstrap-server";
 pub const ARG_EXTRA_PROPERTIES: &'static str = "extra-properties";
 pub const ARG_EXTRA_PROPERTIES_FILE: &'static str = "extra-properties-file";
@@ -83,7 +85,14 @@ fn add_global_args(app: Command) -> Command {
         .arg(&arg_timeout);
 }
 
-pub fn parse_args(args: &Vec<String>) -> ArgMatches {
+pub fn create_cmd() -> Command<'static> {
+    let arg_completions = Arg::new(ARG_COMPLETIONS)
+        .help("Generate shell completions")
+        .short('c')
+        .long(ARG_COMPLETIONS)
+        .value_parser(value_parser!(Shell))
+        .value_name("SHELL");
+
     let arg_with_offsets = Arg::with_name(ARG_WITH_OFFSETS)
         .help("Include offsets")
         .long(ARG_WITH_OFFSETS);
@@ -252,9 +261,10 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
         .short('l')
         .long(ARG_LAGS);
 
-    return Command::new("Milena")
+    return Command::new("milena")
         .version(crate_version!())
         .propagate_version(false)
+        .arg(arg_completions)
         .subcommand(add_global_args(Command::new(CMD_BROKERS)
             .about("Display information about the brokers")))
         .subcommand(Command::new(CMD_TOPICS)
@@ -333,6 +343,5 @@ pub fn parse_args(args: &Vec<String>) -> ArgMatches {
             .arg(&arg_payload_file)
             .arg(&arg_json_batch_producer))
             .arg(&arg_batch_size))
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .get_matches_from(args);
+        .setting(AppSettings::ArgRequiredElseHelp);
 }

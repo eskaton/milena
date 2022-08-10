@@ -1,16 +1,17 @@
-#[macro_use(crate_version)]
+#[macro_use(crate_version, value_parser)]
 extern crate clap;
 
+use std::{env, io};
 use std::borrow::{Borrow, Cow};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::fs::{read, read_to_string};
 use std::iter::FromIterator;
 use std::time::Duration;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use clap::ArgMatches;
+use clap::{ArgMatches, Command};
+use clap_complete::{generate, Shell};
 use futures::executor;
 use num_integer::div_mod_floor;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
@@ -28,8 +29,8 @@ use rdkafka::types::RDKafkaType;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::args::{CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
-use crate::args::parse_args;
+use crate::args::{ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
+use crate::args::create_cmd;
 use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, GroupConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
 
 mod args;
@@ -811,20 +812,20 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
 
     if config.timestamp_before.is_some() {
         if timestamp.is_none() {
-            return None
+            return None;
         } else {
             if config.timestamp_before.unwrap() <= timestamp.as_ref().unwrap().time.timestamp_nanos() {
-                return None
+                return None;
             }
         }
     }
 
     if config.timestamp_after.is_some() {
         if timestamp.is_none() {
-            return None
+            return None;
         } else {
             if config.timestamp_after.unwrap() >= timestamp.as_ref().unwrap().time.timestamp_nanos() {
-                return None
+                return None;
             }
         }
     }
@@ -836,9 +837,9 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
 
     if config.key_regex.is_some() {
         if key.is_none() {
-            return None
+            return None;
         } else if !config.key_regex.as_ref().unwrap().is_match(key.as_ref().unwrap().as_ref()) {
-            return None
+            return None;
         }
     }
 
@@ -951,9 +952,16 @@ fn get_key(config: &ProduceConfig) -> Option<Vec<u8>> {
     }
 }
 
+fn cmd_completions(generator: &Shell, cmd: &mut Command) {
+    generate(*generator, cmd, cmd.get_name().to_string(), &mut io::stdout());
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let matches = parse_args(&args);
+    let matches = create_cmd().get_matches_from(&args);
+    let generator = matches.get_one::<Shell>(ARG_COMPLETIONS);
+
+    generator.map(|gen| cmd_completions(gen, &mut create_cmd()));
 
     match matches.subcommand() {
         Some((CMD_BROKERS, matches)) => cmd_brokers(&matches),
