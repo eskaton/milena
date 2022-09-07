@@ -879,12 +879,14 @@ fn cmd_produce(matches: &ArgMatches) {
 
         for message in messages.iter() {
             let msg_payload = message.payload.as_ref().map(|s| s.to_string());
-            let msg_headers = message.headers.as_ref().unwrap();
+            let msg_headers = message.headers.as_ref();
             let msg_key = message.key.as_ref().map(|s| s.as_bytes().to_owned());
             let mut headers = OwnedHeaders::new();
 
-            for header in msg_headers {
-                headers = headers.add(header.key.as_str(), &header.value.to_string());
+            if msg_headers.is_some() {
+                for header in msg_headers.unwrap() {
+                    headers = headers.add(header.key.as_str(), &header.value.to_string());
+                }
             }
 
             send_message(&config, &producer, &msg_payload, &msg_key, &headers);
