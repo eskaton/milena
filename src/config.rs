@@ -123,20 +123,16 @@ impl OffsetsConfig {
         let base = BaseConfig::new(matches);
         let topic = matches.value_of(ARG_TOPIC).map(|s| s.to_string());
         let consumer_group = matches.value_of(ARG_CONSUMER_GROUP).map(|s| s.to_string());
-        let partitions = match matches.is_present(ARG_PARTITIONS) {
-            true => Some(matches.values_of(ARG_PARTITIONS)
-                .map(|v| v.map(|s| parse_partition(&s.to_string()))
-                    .collect::<Vec<i32>>()).unwrap()),
-            _ => None
-        };
-        let offsets = match matches.is_present(ARG_OFFSETS) {
-            true => Some(matches.values_of(ARG_OFFSETS)
-                .map(|v| v.map(|s| parse_offset(&s.to_string()))
-                    .collect::<Vec<i64>>()).unwrap()),
-            _ => None
-        };
-        let earliest = matches.is_present(ARG_EARLIEST);
-        let lags = matches.is_present(ARG_LAGS);
+        let partitions = matches.try_get_many::<String>(ARG_PARTITIONS)
+            .ok()
+            .unwrap_or(None)
+            .map(|v| v.map(|s| parse_partition(s)).collect::<Vec<i32>>());
+        let offsets = matches.try_get_many::<String>(ARG_OFFSETS)
+            .ok()
+            .unwrap_or(None)
+            .map(|v| v.map(|s| parse_offset(s)).collect::<Vec<i64>>());
+        let earliest = matches.try_contains_id(ARG_EARLIEST).unwrap_or(false);
+        let lags = matches.try_contains_id(ARG_LAGS).unwrap_or(false);
 
         Self {
             base,
@@ -182,9 +178,9 @@ impl TopicConfig {
 
         let base = BaseConfig::new(matches);
         let topic = matches.value_of(ARG_TOPIC).map(|s| s.to_string());
-        let with_offsets = matches.is_present(ARG_WITH_OFFSETS);
-        let partitions = matches.value_of(ARG_PARTITIONS).map(|s| parse_partition(&s.to_string()));
-        let replication = matches.value_of(ARG_REPLICATION).map(|s| parse_replication(&s.to_string()));
+        let with_offsets = matches.try_contains_id(ARG_WITH_OFFSETS).unwrap_or(false);
+        let partitions = matches.try_get_one(ARG_PARTITIONS).unwrap_or(None).map(|s: &String| parse_partition(s));
+        let replication = matches.try_get_one(ARG_REPLICATION).unwrap_or(None).map(|s: &String| parse_replication(s));
 
         Self {
             base,
