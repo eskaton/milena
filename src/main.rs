@@ -38,6 +38,11 @@ mod config;
 
 const DEFAULT_GROUP_ID: &'static str = "milena";
 
+enum OffsetPosition {
+    Earliest,
+    Latest,
+}
+
 #[derive(Debug, Serialize)]
 struct Broker {
     id: i32,
@@ -636,6 +641,7 @@ fn alter_offsets(config: &OffsetsConfig) {
     let mut topic_partitions: TopicPartitionList = TopicPartitionList::new();
     let topic = config.topic.as_ref().unwrap();
     let earliest = config.earliest;
+    let latest = config.latest;
     let metadata = client.fetch_metadata(Some(topic.as_str()), config.base.timeout)
         .expect(format!("Failed to fetch metadata for topic {}", topic).as_str());
     let metadata_partitions: HashSet<i32> = metadata.topics().iter().flat_map(|t| t.partitions().iter().map(|p| p.id())).collect();
@@ -644,11 +650,9 @@ fn alter_offsets(config: &OffsetsConfig) {
         let partitions = config.partitions.as_ref().unwrap();
 
         if earliest {
-            partitions.iter().for_each(|partition| {
-                let (low, _) = get_watermarks(&client, topic, *partition);
-
-                topic_partitions.add_partition_offset(topic.as_str(), *partition, Offset(low));
-            });
+            partitions.iter().for_each(|partition| add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Earliest));
+        } else if latest {
+            partitions.iter().for_each(|partition| add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Latest));
         } else {
             let offsets = config.offsets.as_ref().unwrap();
 
@@ -668,11 +672,9 @@ fn alter_offsets(config: &OffsetsConfig) {
         }
     } else {
         if earliest {
-            metadata_partitions.iter().for_each(|partition| {
-                let (low, _) = get_watermarks(&client, topic, *partition);
-
-                topic_partitions.add_partition_offset(topic.as_str(), *partition, Offset(low));
-            });
+            metadata_partitions.iter().for_each(|partition| add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Earliest));
+        } else if latest {
+            metadata_partitions.iter().for_each(|partition| add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Latest));
         } else {
             let offsets = config.offsets.as_ref().unwrap();
 
@@ -687,6 +689,15 @@ fn alter_offsets(config: &OffsetsConfig) {
 
     client.store_offsets(&topic_partitions).expect("Failed to store offsets");
     client.commit(&topic_partitions, CommitMode::Sync).expect("Failed to commit offsets");
+}
+
+fn add_offset(client: &BaseConsumer, topic_partitions: &mut TopicPartitionList, topic: &String, partition: &i32, position: OffsetPosition) {
+    let (low, high) = get_watermarks(&client, topic, *partition);
+
+    topic_partitions.add_partition_offset(topic.as_str(), *partition, Offset(match position {
+        OffsetPosition::Earliest => low,
+        OffsetPosition::Latest => high
+    }));
 }
 
 fn cmd_consume(matches: &ArgMatches) {

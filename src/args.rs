@@ -23,6 +23,7 @@ pub const ARG_WITH_OFFSETS: &'static str = "with-offsets";
 pub const ARG_TOPIC: &'static str = "topic";
 pub const ARG_OFFSETS: &'static str = "offsets";
 pub const ARG_EARLIEST: &'static str = "earliest";
+pub const ARG_LATEST: &'static str = "latest";
 pub const ARG_LAGS: &'static str = "lags";
 pub const ARG_PARTITIONS: &'static str = "partitions";
 pub const ARG_PARTITION: &'static str = "partition";
@@ -252,8 +253,14 @@ pub fn create_cmd() -> Command<'static> {
 
     let arg_earliest = Arg::with_name(ARG_EARLIEST)
         .help("Set offsets to earliest")
-        .short('e')
+        .short('E')
         .long(ARG_EARLIEST)
+        .conflicts_with(ARG_OFFSETS);
+
+    let arg_latest = Arg::with_name(ARG_LATEST)
+        .help("Set offsets to latest")
+        .short('L')
+        .long(ARG_LATEST)
         .conflicts_with(ARG_OFFSETS);
 
     let arg_lags = Arg::with_name(ARG_LAGS)
@@ -307,9 +314,11 @@ pub fn create_cmd() -> Command<'static> {
                 .arg(&arg_partitions)
                 .arg(&arg_offsets_offsets)
                 .arg(arg_earliest)
+                .arg(arg_latest)
                 .group(ArgGroup::with_name("offset")
                     .arg(ARG_OFFSETS)
                     .arg(ARG_EARLIEST)
+                    .arg(ARG_LATEST)
                     .required(true)))))
         .subcommand(add_global_args(Command::new(CMD_CONFIG)
             .about("Display and alter topic configuration")
