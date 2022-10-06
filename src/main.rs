@@ -704,7 +704,7 @@ fn cmd_consume(matches: &ArgMatches) {
     let config = ConsumeConfig::new(matches);
     let consumer_group = Option::from(config.consumer_group.clone());
     let consumer: BaseConsumer = create_consumer(&config.base, consumer_group);
-    let count = config.count.unwrap_or(0);
+    let mut count = config.count.unwrap_or(0);
     let json_batch = config.json_batch;
     let mut current_count = 0;
     let topic_partition = get_topic_partitions(&consumer, &config);
@@ -719,6 +719,10 @@ fn cmd_consume(matches: &ArgMatches) {
         true => None,
         false => Some(Duration::new(1, 0))
     };
+
+    if config.tail.is_some() {
+        count = config.tail.unwrap() as usize;
+    }
 
     loop {
         if count > 0 && count == current_count {
