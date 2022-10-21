@@ -1,3 +1,4 @@
+use std::panic;
 use std::path::Path;
 use std::time::Duration;
 
@@ -5,13 +6,7 @@ use chrono::DateTime;
 use clap::ArgMatches;
 use regex::Regex;
 
-use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST,
-                  ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS,
-                  ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST,
-                  ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS,
-                  ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET,
-                  ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC,
-                  ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
+use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADER_REGEX, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -211,6 +206,7 @@ pub struct ConsumeConfig {
     pub count: Option<usize>,
     pub json_batch: bool,
     pub key_regex: Option<Regex>,
+    pub header_regexes: Option<Vec<(Regex, Regex)>>,
     pub timestamp_before: Option<i64>,
     pub timestamp_after: Option<i64>,
 }
@@ -242,6 +238,9 @@ impl ConsumeConfig {
         };
         let json_batch = matches.is_present(ARG_JSON_BATCH);
         let key_regex = matches.value_of(ARG_KEY_REGEX).map(|s| Regex::new(s).unwrap());
+        let header_regexes = matches.values_of(ARG_HEADER_REGEX)
+            .map(|values| values.map(|s| parse_header_regex(s))
+                .collect::<Vec<(Regex, Regex)>>());
         let timestamp_before = matches.value_of(ARG_TIMESTAMP_BEFORE).map(|s| parse_timestamp(s));
         let timestamp_after = matches.value_of(ARG_TIMESTAMP_AFTER).map(|s| parse_timestamp(s));
 
@@ -289,46 +288,53 @@ impl ConsumeConfig {
             count,
             json_batch,
             key_regex,
+            header_regexes,
             timestamp_before,
             timestamp_after,
         }
     }
 }
 
+fn parse_header_regex(s: &str) -> (Regex, Regex) {
+    s.split_once('=')
+        .map(|(k, v)| (Regex::new(k).unwrap(), Regex::new(v).unwrap()))
+        .expect(format!("Invalid header regex: '{}'", s).as_str())
+}
+
 fn parse_timestamp(s: &str) -> i64 {
-    return DateTime::parse_from_rfc3339(s)
+    DateTime::parse_from_rfc3339(s)
         .expect(format!("Invalid ISO-8601 timestamp: '{}'", s).as_str())
-        .timestamp_nanos();
+        .timestamp_nanos()
 }
 
 fn parse_partition(str: &String) -> i32 {
-    return str.parse::<u32>()
-        .expect(format!("Invalid partition: '{}'", str).as_str()) as i32;
+    str.parse::<u32>()
+        .expect(format!("Invalid partition: '{}'", str).as_str()) as i32
 }
 
 fn parse_offset(str: &String) -> i64 {
-    return str.parse::<i64>()
-        .expect(format!("Invalid offset: '{}'", str).as_str());
+    str.parse::<i64>()
+        .expect(format!("Invalid offset: '{}'", str).as_str())
 }
 
 fn parse_replication(str: &String) -> i32 {
-    return str.parse::<i32>()
-        .expect(format!("Invalid replication factor: '{}'", str).as_str());
+    str.parse::<i32>()
+        .expect(format!("Invalid replication factor: '{}'", str).as_str())
 }
 
 fn parse_number(str: &String) -> i64 {
-    return str.parse::<i64>()
-        .expect(format!("Invalid number: '{}'", str).as_str());
+    str.parse::<i64>()
+        .expect(format!("Invalid number: '{}'", str).as_str())
 }
 
 fn parse_timeout(str: &String) -> u64 {
-    return str.parse::<u64>()
-        .expect(format!("Invalid timeout: '{}'", str).as_str());
+    str.parse::<u64>()
+        .expect(format!("Invalid timeout: '{}'", str).as_str())
 }
 
 fn parse_count(str: &String) -> usize {
-    return str.parse::<usize>()
-        .expect(format!("Invalid count: '{}'", str).as_str());
+    str.parse::<usize>()
+        .expect(format!("Invalid count: '{}'", str).as_str())
 }
 
 pub struct ProduceConfig {

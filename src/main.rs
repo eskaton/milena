@@ -801,10 +801,8 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Topi
 }
 
 fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> (i64, i64) {
-    let (low, high) = consumer
-        .fetch_watermarks(topic, partition, Duration::from_secs(1))
-        .unwrap_or((-1, -1));
-    (low, high)
+    consumer.fetch_watermarks(topic, partition, Duration::from_secs(1))
+        .unwrap_or((-1, -1))
 }
 
 fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> Option<ConsumedMessage<'a>> {
@@ -855,6 +853,24 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
             return None;
         } else if !config.key_regex.as_ref().unwrap().is_match(key.as_ref().unwrap().as_ref()) {
             return None;
+        }
+    }
+
+    if config.header_regexes.is_some() {
+        if headers.is_none() {
+            return None;
+        } else {
+            let mut matched = 0usize;
+
+            config.header_regexes.as_ref().unwrap().iter().for_each(|(key_regex, value_regex)| {
+                if headers.as_ref().unwrap().iter().filter(|h| key_regex.is_match(h.key.as_str()) && value_regex.is_match(h.value.as_str())).count() > 0usize {
+                    matched = matched + 1;
+                }
+            });
+
+            if matched != config.header_regexes.as_ref().unwrap().len() {
+                return None;
+            }
         }
     }
 

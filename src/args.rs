@@ -41,6 +41,7 @@ pub const ARG_NO_TIMESTAMP: &'static str = "no-timestamp";
 pub const ARG_NO_KEY: &'static str = "no-key";
 pub const ARG_NO_PAYLOAD: &'static str = "no-payload";
 pub const ARG_KEY_REGEX: &'static str = "key-regex";
+pub const ARG_HEADER_REGEX: &'static str = "header-regex";
 pub const ARG_TIMESTAMP_BEFORE: &'static str = "timestamp-before";
 pub const ARG_TIMESTAMP_AFTER: &'static str = "timestamp-after";
 pub const ARG_GET: &'static str = "get";
@@ -213,6 +214,12 @@ pub fn create_cmd() -> Command<'static> {
         .long(ARG_KEY_REGEX)
         .value_name("REGEX");
 
+    let arg_header_regex = Arg::with_name(ARG_HEADER_REGEX)
+        .help("Comma separated list of regular expression to filter messages by headers (Format: <key-regex>=<value-regex>)")
+        .value_delimiter(',')
+        .long(ARG_HEADER_REGEX)
+        .value_name("REGEX");
+
     let arg_get = Arg::with_name(ARG_GET)
         .help("Get configuration values")
         .long(ARG_GET)
@@ -341,6 +348,7 @@ pub fn create_cmd() -> Command<'static> {
             .arg(&arg_timestamp_before)
             .arg(&arg_timestamp_after)
             .arg(&arg_key_regex)
+            .arg(&arg_header_regex)
             .arg(&arg_json_batch_consumer)))
         .subcommand(add_global_args(Command::new(CMD_PRODUCE)
             .about("Produce to a topic")
