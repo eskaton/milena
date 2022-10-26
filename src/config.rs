@@ -209,6 +209,7 @@ pub struct ConsumeConfig {
     pub header_regexes: Option<Vec<(Regex, Regex)>>,
     pub timestamp_before: Option<i64>,
     pub timestamp_after: Option<i64>,
+    pub latest: bool
 }
 
 impl ConsumeConfig {
@@ -243,6 +244,7 @@ impl ConsumeConfig {
                 .collect::<Vec<(Regex, Regex)>>());
         let timestamp_before = matches.value_of(ARG_TIMESTAMP_BEFORE).map(|s| parse_timestamp(s));
         let timestamp_after = matches.value_of(ARG_TIMESTAMP_AFTER).map(|s| parse_timestamp(s));
+        let latest = matches.is_present(ARG_LATEST);
 
         assert!(count.unwrap_or(1) > 0, "count must be > 0");
 
@@ -291,6 +293,7 @@ impl ConsumeConfig {
             header_regexes,
             timestamp_before,
             timestamp_after,
+            latest
         }
     }
 }

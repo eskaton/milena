@@ -761,6 +761,7 @@ fn cmd_consume(matches: &ArgMatches) {
 
 fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> TopicPartitionList {
     let offsets = &config.offsets;
+    let latest = config.latest;
     let tail = &config.tail;
     let topic = &config.topic;
     let partitions = &config.partitions;
@@ -778,6 +779,16 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Topi
             }
 
             topic_partition.add_partition_offset(&topic, partition, Offset(offset));
+        });
+    } else if latest {
+        partitions.iter().for_each(|p| {
+            let (low, high) = get_watermarks(consumer, topic, *p);
+
+            if high != -1 {
+                let offset = Offset(max(low, high));
+
+                topic_partition.add_partition_offset(&topic, *p, offset);
+            }
         });
     } else if tail.is_some() {
         partitions.iter().for_each(|p| {
