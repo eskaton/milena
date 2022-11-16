@@ -764,7 +764,8 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Topi
     let latest = config.latest;
     let tail = &config.tail;
     let topic = &config.topic;
-    let partitions = &config.partitions;
+    let mut partitions = config.partitions.clone();
+    let all_partitions = config.all_partitions;
     let mut topic_partition: TopicPartitionList = TopicPartitionList::new();
 
     if offsets.is_some() {
@@ -781,6 +782,14 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Topi
             topic_partition.add_partition_offset(&topic, partition, Offset(offset));
         });
     } else if latest {
+        if all_partitions {
+            let metadata = consumer.fetch_metadata(Some(topic), config.base.timeout).expect("Failed to fetch metadata");
+            let topics = metadata.topics().iter().filter(|t| t.name().eq(topic)).collect::<Vec<&MetadataTopic>>();
+            let topics_meta = topics.get(0).unwrap();
+
+            partitions = topics_meta.partitions().iter().map(|mdp| mdp.id()).collect::<Vec<i32>>();
+        }
+
         partitions.iter().for_each(|p| {
             let (low, high) = get_watermarks(consumer, topic, *p);
 

@@ -6,7 +6,7 @@ use chrono::DateTime;
 use clap::ArgMatches;
 use regex::Regex;
 
-use crate::args::{ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADER_REGEX, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
+use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADER_REGEX, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
@@ -195,6 +195,7 @@ pub struct ConsumeConfig {
     pub base: BaseConfig,
     pub topic: String,
     pub partitions: Vec<i32>,
+    pub all_partitions: bool,
     pub offsets: Option<Vec<i64>>,
     pub consumer_group: String,
     pub follow: bool,
@@ -219,6 +220,7 @@ impl ConsumeConfig {
         let partitions_unsorted = matches.values_of(ARG_PARTITIONS)
             .map(|v| v.map(|s| parse_partition(&s.to_string()))
                 .collect::<Vec<i32>>()).unwrap();
+        let all_partitions = matches.is_present(ARG_ALL_PARTITIONS);
         let maybe_offsets_unsorted = matches.values_of(ARG_OFFSETS)
             .map(|v| v.map(|s| parse_offset(&s.to_string()))
                 .collect::<Vec<i64>>());
@@ -279,6 +281,7 @@ impl ConsumeConfig {
             base,
             topic,
             partitions: partitions_sorted,
+            all_partitions: all_partitions,
             offsets: offsets_sorted,
             consumer_group,
             follow,

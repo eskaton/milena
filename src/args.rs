@@ -26,6 +26,7 @@ pub const ARG_EARLIEST: &'static str = "earliest";
 pub const ARG_LATEST: &'static str = "latest";
 pub const ARG_LAGS: &'static str = "lags";
 pub const ARG_PARTITIONS: &'static str = "partitions";
+pub const ARG_ALL_PARTITIONS: &'static str = "all-partitions";
 pub const ARG_PARTITION: &'static str = "partition";
 pub const ARG_REPLICATION: &'static str = "replication";
 pub const ARG_CONSUMER_GROUP: &'static str = "consumer-group";
@@ -129,6 +130,11 @@ pub fn create_cmd() -> Command<'static> {
         .short('p')
         .long(ARG_PARTITION)
         .value_name("PARTITION");
+
+    let arg_all_partition = Arg::with_name(ARG_ALL_PARTITIONS)
+        .help("Consume from all partitions")
+        .long(ARG_ALL_PARTITIONS)
+        .conflicts_with_all(&[ARG_PARTITIONS, ARG_TAIL]);
 
     let arg_offsets = Arg::with_name(ARG_OFFSETS)
         .help("A comma separated list of offsets")
@@ -336,6 +342,7 @@ pub fn create_cmd() -> Command<'static> {
             .about("Consume from a topic")
             .arg(&arg_topic.clone().required(true))
             .arg(&arg_partitions.clone().default_value("0"))
+            .arg(&arg_all_partition)
             .arg(&arg_offsets)
             .arg(&arg_group)
             .arg(&arg_follow)
