@@ -15,11 +15,11 @@ use clap_complete::{generate, Shell};
 use futures::executor;
 use num_integer::div_mod_floor;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
-use rdkafka::admin::{AdminClient, AdminOptions, AlterConfig, ConfigResource, NewPartitions, NewTopic, OwnedResourceSpecifier, ResourceSpecifier};
+use rdkafka::admin::{AdminClient, AdminOptions, AlterConfig, ConfigResourceResult, NewPartitions, NewTopic, OwnedResourceSpecifier, ResourceSpecifier, TopicResult};
 use rdkafka::admin::TopicReplication::Fixed;
 use rdkafka::client::{Client, DefaultClientContext};
 use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer};
-use rdkafka::error::{KafkaError, KafkaResult, RDKafkaError};
+use rdkafka::error::KafkaResult;
 use rdkafka::message::{BorrowedHeaders, BorrowedMessage, DeliveryResult, Headers, Message, OwnedHeaders};
 use rdkafka::message::Timestamp::CreateTime;
 use rdkafka::metadata::MetadataTopic;
@@ -32,9 +32,13 @@ use serde_json::json;
 use crate::args::{ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
 use crate::args::create_cmd;
 use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, GroupConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
+use crate::error::{MilenaError, Result};
+use crate::MilenaError::GenericError;
 
 mod args;
 mod config;
+mod error;
+mod utils;
 
 const DEFAULT_GROUP_ID: &'static str = "milena";
 
@@ -304,35 +308,40 @@ fn escape_newlines(string: &String) -> String {
         .replace("\r", "\\r")
 }
 
-fn create_consumer(config: &BaseConfig, consumer_group: Option<String>) -> BaseConsumer {
+fn create_consumer(config: &BaseConfig, consumer_group: Option<String>) -> Result<BaseConsumer> {
     let mut client_config = create_client_config(config);
 
     consumer_group.map(|g| client_config.set(&"group.id", g.as_str()));
 
-    client_config.create().expect("Failed to create consumer")
+    let client = client_config.create::<BaseConsumer>().map_err(|e| GenericError(format!("Failed to create consumer: {}", e)))?;
+
+    Ok(client)
 }
 
-fn create_producer(config: &BaseConfig) -> BaseProducer<KeyContext> {
+fn create_producer(config: &BaseConfig) -> Result<BaseProducer<KeyContext>> {
     let client_config = create_client_config(config);
+    let client = client_config.create_with_context(KeyContext {})
+        .map_err(|e| GenericError(format!("Failed to create producer: {}", e)))?;
 
-    client_config.create_with_context(KeyContext {})
-        .expect("Failed to create producer")
+    Ok(client)
 }
 
-fn create_admin_client(config: &BaseConfig) -> AdminClient<DefaultClientContext> {
+fn create_admin_client(config: &BaseConfig) -> Result<AdminClient<DefaultClientContext>> {
     let client_config = create_client_config(config);
+    let client = client_config.create().map_err(|e| GenericError(format!("Failed to create admin client: {}", e)))?;
 
-    client_config.create().expect("Failed to create admin client")
+    Ok(client)
 }
 
-fn create_client(config: &BaseConfig) -> Client {
+fn create_client(config: &BaseConfig) -> Result<Client> {
     let client_config = create_client_config(config);
     let native_config = client_config.create_native_config()
-        .expect("Failed to create native config");
+        .map_err(|e| GenericError(format!("Failed to create native config: {}", e)))?;
     let kafka_type = RDKafkaType::RD_KAFKA_PRODUCER;
+    let client = Client::new(&client_config, native_config, kafka_type, DefaultClientContext)
+        .map_err(|e| GenericError(format!("Failed to create client: {}", e)))?;
 
-    Client::new(&client_config, native_config, kafka_type, DefaultClientContext)
-        .expect("Failed to create client")
+    Ok(client)
 }
 
 fn create_client_config(config: &BaseConfig) -> ClientConfig {
@@ -352,9 +361,9 @@ fn create_client_config(config: &BaseConfig) -> ClientConfig {
     client_config
 }
 
-fn cmd_config(matches: &ArgMatches) {
-    let config = ConfigConfig::new(matches);
-    let client = create_admin_client(&config.base);
+fn cmd_config(matches: &ArgMatches) -> Result<()> {
+    let config = ConfigConfig::new(matches)?;
+    let client = create_admin_client(&config.base)?;
 
     match &config.mode {
         ConfigMode::GET => config_get(&config, &client),
@@ -362,15 +371,16 @@ fn cmd_config(matches: &ArgMatches) {
     }
 }
 
-fn config_get(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>) {
+fn config_get(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>) -> Result<()> {
     let options = AdminOptions::new();
-    let configs = executor::block_on(get_configs(&config, client, &options));
+    let configs = executor::block_on(get_configs(&config, client, &options))?;
     let topics_configs = configs.iter().map(|result| {
-        let resource = result.as_ref().expect("Failed to get result");
+        let resource = result.as_ref()
+            .map_err(|e| GenericError(format!("Failed to get result: {}", e)))?;
         let topic = match &resource.specifier {
-            OwnedResourceSpecifier::Topic(name) => name.to_string(),
-            _ => panic!("Received configuration for unexpected resource")
-        };
+            OwnedResourceSpecifier::Topic(name) => Ok(name.to_string()),
+            _ => Err(GenericError(format!("Received configuration for unexpected resource")))
+        }?;
         let pattern = config.pattern.as_ref();
         let configs = resource.entries.iter()
             .filter(|entry| {
@@ -386,29 +396,32 @@ fn config_get(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>)
                 ConfigValue::new(name, value)
             }).collect::<Vec<ConfigValue>>();
 
-        TopicConfigs::new(topic, configs)
-    }).collect::<Vec<TopicConfigs>>();
+        Ok(TopicConfigs::new(topic, configs))
+    }).collect::<Result<Vec<TopicConfigs>>>()?;
 
-    println!("{}", json!(topics_configs).to_string())
+    println!("{}", json!(topics_configs).to_string());
+
+    Ok(())
 }
 
-async fn get_configs(config: &ConfigConfig, admin_client: &AdminClient<DefaultClientContext>, options: &AdminOptions) -> Vec<Result<ConfigResource, RDKafkaError>> {
-    let client = create_client(&config.base);
+async fn get_configs(config: &ConfigConfig, admin_client: &AdminClient<DefaultClientContext>, options: &AdminOptions) -> Result<Vec<ConfigResourceResult>> {
+    let client = create_client(&config.base)?;
     let metadata = client
         .fetch_metadata(None, config.base.timeout)
-        .expect("Failed to fetch metadata");
+        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
     let topics: Vec<String> = match &config.topic {
         None => metadata.topics().iter().map(|m| m.name().to_string()).collect(),
         Some(topic) => metadata.topics().iter().filter(|t| t.name().eq(topic.as_str())).map(|m| m.name().to_string()).collect()
     };
     let requested_topics = topics.iter().map(|n| ResourceSpecifier::Topic(n)).collect::<Vec<ResourceSpecifier>>();
-
-    admin_client.describe_configs(&requested_topics, &options)
+    let result = admin_client.describe_configs(&requested_topics, &options)
         .await
-        .expect("Failed to get topic configuration")
+        .map_err(|e| GenericError(format!("Failed to get topic configuration: {}", e)))?;
+
+    Ok(result)
 }
 
-fn config_set(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>) {
+fn config_set(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>) -> Result<()> {
     let options = AdminOptions::new();
     let topic = config.topic.as_ref().unwrap();
     let mut alter_config = AlterConfig::new(ResourceSpecifier::Topic(topic.as_str()));
@@ -422,35 +435,41 @@ fn config_set(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>)
     match result {
         Ok(_) => println!("Configuration of topic {} altered", topic),
         Err(e) => println!("Failed to alter topic configuration: {}", e)
-    }
+    };
+
+    Ok(())
 }
 
-fn cmd_brokers(matches: &ArgMatches) {
-    let config = BaseConfig::new(matches);
-    let client: Client = create_client(&config);
+fn cmd_brokers(matches: &ArgMatches) -> Result<()> {
+    let config = BaseConfig::new(matches)?;
+    let client: Client = create_client(&config)?;
     let metadata = client
         .fetch_metadata(None, config.timeout)
-        .expect("Failed to fetch metadata");
+        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
     let brokers: Vec<Broker> = metadata.brokers().iter()
         .map(|broker| Broker::new(broker.id(), broker.host().to_string(), broker.port()))
         .collect();
 
-    println!("{}", json!(brokers).to_string())
+    println!("{}", json!(brokers).to_string());
+
+    Ok(())
 }
 
-fn cmd_topics(matches: &ArgMatches) {
-    let config = TopicConfig::new(matches);
+fn cmd_topics(matches: &ArgMatches) -> Result<()> {
+    let config = TopicConfig::new(matches)?;
 
     match config.mode {
         TopicMode::ALTER => alter_topic(&config),
         TopicMode::CREATE => create_topic(&config),
         TopicMode::DELETE => delete_topic(&config),
         _ => show_topics(&config)
-    };
+    }?;
+
+    Ok(())
 }
 
-fn create_topic(config: &TopicConfig) {
-    let client = create_admin_client(&config.base);
+fn create_topic(config: &TopicConfig) -> Result<()> {
+    let client = create_admin_client(&config.base)?;
     let topic = config.topic.as_ref().unwrap();
     let partitions = config.partitions.unwrap_or(1);
     let replication = config.replication.unwrap_or(1);
@@ -458,20 +477,24 @@ fn create_topic(config: &TopicConfig) {
     let options = AdminOptions::new();
     let result = executor::block_on(client.create_topics(&[new_topic], &options));
 
-    evaluate_topic_result(topic, result, "created", "create")
+    evaluate_topic_result(topic, result, "created", "create");
+
+    Ok(())
 }
 
-fn delete_topic(config: &TopicConfig) {
-    let client = create_admin_client(&config.base);
+fn delete_topic(config: &TopicConfig) -> Result<()> {
+    let client = create_admin_client(&config.base)?;
     let topic = config.topic.as_ref().unwrap();
     let options = AdminOptions::new();
     let result = executor::block_on(client.delete_topics(&[topic], &options));
 
-    evaluate_topic_result(topic, result, "deleted", "delete")
+    evaluate_topic_result(topic, result, "deleted", "delete");
+
+    Ok(())
 }
 
-fn alter_topic(config: &TopicConfig) {
-    let client = create_admin_client(&config.base);
+fn alter_topic(config: &TopicConfig) -> Result<()> {
+    let client = create_admin_client(&config.base)?;
     let topic = config.topic.as_ref().unwrap();
     let options = AdminOptions::new();
 
@@ -484,10 +507,12 @@ fn alter_topic(config: &TopicConfig) {
     } else {
         println!("Topic {} unchanged. Please provide a new settings", topic);
     }
+
+    Ok(())
 }
 
 fn evaluate_topic_result(topic: &String,
-                         result: Result<Vec<Result<String, (String, RDKafkaError)>>, KafkaError>,
+                         result: KafkaResult<Vec<TopicResult>>,
                          done: &str,
                          operation: &str) {
     match result {
@@ -501,11 +526,11 @@ fn evaluate_topic_result(topic: &String,
     }
 }
 
-fn show_topics(config: &TopicConfig) {
-    let consumer: BaseConsumer = create_consumer(&config.base, None);
+fn show_topics(config: &TopicConfig) -> Result<()> {
+    let consumer: BaseConsumer = create_consumer(&config.base, None)?;
     let metadata = consumer
         .fetch_metadata(None, config.base.timeout)
-        .expect("Failed to fetch metadata");
+        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
     let mut rec_topics = Vec::<Topic>::new();
     let topics: Vec<&MetadataTopic> = match &config.topic {
         None => metadata.topics().iter().collect(),
@@ -541,18 +566,20 @@ fn show_topics(config: &TopicConfig) {
         TopicMode::DESCRIBE => println!("{}", json!(rec_topics).to_string()),
         _ => {}
     }
+
+    Ok(())
 }
 
-fn cmd_groups(matches: &ArgMatches) {
-    let config = GroupConfig::new(matches);
-    let client: BaseConsumer = create_consumer(&config.base, None);
+fn cmd_groups(matches: &ArgMatches) -> Result<()> {
+    let config = GroupConfig::new(matches)?;
+    let client: BaseConsumer = create_consumer(&config.base, None)?;
 
     client.fetch_metadata(None, config.base.timeout)
-        .expect("Failed to fetch metadata");
+        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
 
     let group_list = client
         .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), config.base.timeout)
-        .expect("Failed to fetch group list");
+        .map_err(|e| GenericError(format!("Failed to fetch group list: {}", e)))?;
     let mut rec_groups = Vec::<Group>::new();
 
     group_list.groups().iter().for_each(|group| {
@@ -563,32 +590,36 @@ fn cmd_groups(matches: &ArgMatches) {
         rec_groups.push(rec_group)
     });
 
-    println!("{}", json!(rec_groups).to_string())
+    println!("{}", json!(rec_groups).to_string());
+
+    Ok(())
 }
 
-fn cmd_offsets(matches: &ArgMatches) {
-    let config = OffsetsConfig::new(matches);
+fn cmd_offsets(matches: &ArgMatches) -> Result<()> {
+    let config = OffsetsConfig::new(matches)?;
 
     match config.mode {
         OffsetMode::ALTER => alter_offsets(&config),
         _ => show_offsets(&config)
-    };
+    }?;
+
+    Ok(())
 }
 
-fn show_offsets(config: &OffsetsConfig) {
-    let client: BaseConsumer = create_consumer(&config.base, None);
+fn show_offsets(config: &OffsetsConfig) -> Result<()> {
+    let client: BaseConsumer = create_consumer(&config.base, None)?;
     let metadata = client
         .fetch_metadata(config.topic.as_ref().map(|topic| topic.as_str()), config.base.timeout)
-        .expect("Failed to fetch metadata");
+        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
     let group_list = client
         .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), config.base.timeout)
-        .expect("Failed to fetch group list");
+        .map_err(|e| GenericError(format!("Failed to fetch group list: {}", e)))?;
     let groups: Vec<String> = group_list.groups().iter().map(|group| group.name().to_string()).collect();
     let topics: Vec<&MetadataTopic> = metadata.topics().iter().collect();
     let mut rec_group_offsets = Vec::<GroupOffsets>::new();
 
-    groups.iter().for_each(|group| {
-        let consumer: BaseConsumer = create_consumer(&config.base, Some(group.to_string()));
+    for group in groups {
+        let consumer: BaseConsumer = create_consumer(&config.base, Some(group.to_string()))?;
         let mut topic_partitions: TopicPartitionList = TopicPartitionList::new();
         let mut group_offsets = GroupOffsets::new(group.to_string());
 
@@ -598,7 +629,8 @@ fn show_offsets(config: &OffsetsConfig) {
             });
         });
 
-        let offsets = consumer.committed_offsets(topic_partitions, config.base.timeout).expect("Failed to fetch offsets");
+        let offsets = consumer.committed_offsets(topic_partitions, config.base.timeout)
+            .map_err(|e| GenericError(format!("Failed to fetch offsets: {}", e)))?;
         let available_topics: HashSet<_> = offsets.elements().iter().map(|elem| elem.topic().to_string()).collect();
 
         for topic_name in available_topics {
@@ -631,19 +663,21 @@ fn show_offsets(config: &OffsetsConfig) {
         if !group_offsets.topics.is_empty() {
             rec_group_offsets.push(group_offsets)
         }
-    });
+    }
 
-    println!("{}", json!(rec_group_offsets).to_string())
+    println!("{}", json!(rec_group_offsets).to_string());
+
+    Ok(())
 }
 
-fn alter_offsets(config: &OffsetsConfig) {
-    let client: BaseConsumer = create_consumer(&config.base, Some(config.consumer_group.as_ref().unwrap().to_string()));
+fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
+    let client: BaseConsumer = create_consumer(&config.base, Some(config.consumer_group.as_ref().unwrap().to_string()))?;
     let mut topic_partitions: TopicPartitionList = TopicPartitionList::new();
     let topic = config.topic.as_ref().unwrap();
     let earliest = config.earliest;
     let latest = config.latest;
     let metadata = client.fetch_metadata(Some(topic.as_str()), config.base.timeout)
-        .expect(format!("Failed to fetch metadata for topic {}", topic).as_str());
+        .map_err(|e| GenericError(format!("Failed to fetch metadata for topic {}: {}", topic, e)))?;
     let metadata_partitions: HashSet<i32> = metadata.topics().iter().flat_map(|t| t.partitions().iter().map(|p| p.id())).collect();
 
     if config.partitions.as_ref().is_some() {
@@ -657,15 +691,15 @@ fn alter_offsets(config: &OffsetsConfig) {
             let offsets = config.offsets.as_ref().unwrap();
 
             if partitions.len() != offsets.len() {
-                panic!("Number of provided partitions ({}) doesn't match number of offsets ({})",
-                       partitions.len(), offsets.len())
+                return Err(GenericError(format!("Number of provided partitions ({}) doesn't match number of offsets ({})",
+                                                partitions.len(), offsets.len())));
             }
 
             let partition_set = HashSet::from_iter(partitions.iter().cloned());
             let difference: HashSet<_> = partition_set.difference(&metadata_partitions).collect();
 
             if !difference.is_empty() {
-                panic!("Invalid partitions: {:?}", difference);
+                return Err(GenericError(format!("Invalid partitions: {:?}", difference)));
             }
 
             partitions.iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), *p, Offset(*o)));
@@ -679,16 +713,18 @@ fn alter_offsets(config: &OffsetsConfig) {
             let offsets = config.offsets.as_ref().unwrap();
 
             if metadata_partitions.len() != offsets.len() {
-                panic!("Number of offsets ({}) doesn't match number of partitions ({})",
-                       offsets.len(), metadata_partitions.len());
+                return Err(GenericError(format!("Number of offsets ({}) doesn't match number of partitions ({})",
+                                                offsets.len(), metadata_partitions.len())));
             }
 
             (0 as i32..offsets.len() as i32).into_iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), p, Offset(*o)))
         }
     }
 
-    client.store_offsets(&topic_partitions).expect("Failed to store offsets");
-    client.commit(&topic_partitions, CommitMode::Sync).expect("Failed to commit offsets");
+    client.store_offsets(&topic_partitions).map_err(|e| GenericError(format!("Failed to store offsets: {}", e)))?;
+    client.commit(&topic_partitions, CommitMode::Sync).map_err(|e| GenericError(format!("Failed to commit offsets: {}", e)))?;
+
+    Ok(())
 }
 
 fn add_offset(client: &BaseConsumer, topic_partitions: &mut TopicPartitionList, topic: &String, partition: &i32, position: OffsetPosition) {
@@ -700,18 +736,18 @@ fn add_offset(client: &BaseConsumer, topic_partitions: &mut TopicPartitionList, 
     }));
 }
 
-fn cmd_consume(matches: &ArgMatches) {
-    let config = ConsumeConfig::new(matches);
+fn cmd_consume(matches: &ArgMatches) -> Result<()> {
+    let config = ConsumeConfig::new(matches)?;
     let consumer_group = Option::from(config.consumer_group.clone());
-    let consumer: BaseConsumer = create_consumer(&config.base, consumer_group);
+    let consumer: BaseConsumer = create_consumer(&config.base, consumer_group)?;
     let mut count = config.count.unwrap_or(0);
     let json_batch = config.json_batch;
     let mut current_count = 0;
-    let topic_partition = get_topic_partitions(&consumer, &config);
+    let topic_partition = get_topic_partitions(&consumer, &config)?;
     let mut messages = Vec::<ConsumedMessage>::new();
 
     match consumer.assign(&topic_partition) {
-        Err(e) => panic!("Failed to assign partitions: {}", e),
+        Err(e) => return Err(GenericError(format!("Failed to assign partitions: {}", e))),
         Ok(_) => ()
     }
 
@@ -726,12 +762,12 @@ fn cmd_consume(matches: &ArgMatches) {
 
     loop {
         if count > 0 && count == current_count {
-            return;
+            return Ok(());
         }
 
         match consumer.poll(timeout) {
             Some(result) => {
-                let opt_message = handle_fetch_result(&config, &result);
+                let opt_message = handle_fetch_result(&config, &result)?;
 
                 if opt_message.is_none() {
                     continue;
@@ -757,9 +793,11 @@ fn cmd_consume(matches: &ArgMatches) {
     if json_batch {
         println!("{}", json!(messages));
     }
+
+    Ok(())
 }
 
-fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> TopicPartitionList {
+fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Result<TopicPartitionList> {
     let offsets = &config.offsets;
     let latest = config.latest;
     let tail = &config.tail;
@@ -769,21 +807,20 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Topi
     let mut topic_partition: TopicPartitionList = TopicPartitionList::new();
 
     if offsets.is_some() {
-        config.partitions.iter().zip(offsets.as_ref().unwrap().iter()).for_each(|po| {
-            let partition = *po.0;
-            let offset = *po.1;
+        for (&partition, &offset) in config.partitions.iter().zip(offsets.as_ref().unwrap().iter()) {
             let (low, high) = get_watermarks(consumer, topic, partition);
 
             if offset < low || offset > high {
-                panic!("Invalid offset {} for partition {}. Must be in range [{}, {}]",
-                       offset, partition, low, high)
+                return Err(GenericError(format!("Invalid offset {} for partition {}. Must be in range [{}, {}]",
+                                                offset, partition, low, high)));
             }
 
             topic_partition.add_partition_offset(&topic, partition, Offset(offset));
-        });
+        }
     } else if latest {
         if all_partitions {
-            let metadata = consumer.fetch_metadata(Some(topic), config.base.timeout).expect("Failed to fetch metadata");
+            let metadata = consumer.fetch_metadata(Some(topic), config.base.timeout)
+                .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
             let topics = metadata.topics().iter().filter(|t| t.name().eq(topic)).collect::<Vec<&MetadataTopic>>();
             let topics_meta = topics.get(0).unwrap();
 
@@ -817,7 +854,7 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Topi
         });
     }
 
-    topic_partition
+    Ok(topic_partition)
 }
 
 fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> (i64, i64) {
@@ -825,10 +862,8 @@ fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> (i
         .unwrap_or((-1, -1))
 }
 
-fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> Option<ConsumedMessage<'a>> {
-    if result.as_ref().is_err() {
-        panic!("Poll failed with error: {}", result.as_ref().err().unwrap())
-    }
+fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> Result<Option<ConsumedMessage<'a>>> {
+    result.as_ref().map_err(|e| GenericError(format!("Poll failed with error: {}", e)))?;
 
     let message = result.as_ref().unwrap();
     let headers = match config.no_headers {
@@ -845,20 +880,20 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
 
     if config.timestamp_before.is_some() {
         if timestamp.is_none() {
-            return None;
+            return Ok(None);
         } else {
             if config.timestamp_before.unwrap() <= timestamp.as_ref().unwrap().time.timestamp_nanos() {
-                return None;
+                return Ok(None);
             }
         }
     }
 
     if config.timestamp_after.is_some() {
         if timestamp.is_none() {
-            return None;
+            return Ok(None);
         } else {
             if config.timestamp_after.unwrap() >= timestamp.as_ref().unwrap().time.timestamp_nanos() {
-                return None;
+                return Ok(None);
             }
         }
     }
@@ -870,15 +905,15 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
 
     if config.key_regex.is_some() {
         if key.is_none() {
-            return None;
+            return Ok(None);
         } else if !config.key_regex.as_ref().unwrap().is_match(key.as_ref().unwrap().as_ref()) {
-            return None;
+            return Ok(None);
         }
     }
 
     if config.header_regexes.is_some() {
         if headers.is_none() {
-            return None;
+            return Ok(None);
         } else {
             let mut matched = 0usize;
 
@@ -889,7 +924,7 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
             });
 
             if matched != config.header_regexes.as_ref().unwrap().len() {
-                return None;
+                return Ok(None);
             }
         }
     }
@@ -899,7 +934,7 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
         false => message.payload().map(|p| String::from_utf8_lossy(p))
     };
 
-    Some(ConsumedMessage::new(timestamp, key, payload, headers))
+    Ok(Some(ConsumedMessage::new(timestamp, key, payload, headers)))
 }
 
 fn get_headers(borrowed_headers: &BorrowedHeaders) -> Vec<Header> {
@@ -917,9 +952,9 @@ fn get_header(borrowed_headers: &BorrowedHeaders, idx: usize) -> Option<Header> 
     borrowed_headers.get(idx).map(|h| Header::new(h.0.to_string(), String::from_utf8_lossy(h.1).to_string()))
 }
 
-fn cmd_produce(matches: &ArgMatches) {
-    let config = ProduceConfig::new(matches);
-    let producer = create_producer(&config.base);
+fn cmd_produce(matches: &ArgMatches) -> Result<()> {
+    let config = ProduceConfig::new(matches)?;
+    let producer = create_producer(&config.base)?;
     let payload = &config.payload_file.as_ref().map(|f| read_to_string(f).unwrap());
     let json_batch = config.json_batch;
     let batch_size = config.batch_size.unwrap_or(128);
@@ -940,7 +975,7 @@ fn cmd_produce(matches: &ArgMatches) {
                 }
             }
 
-            send_message(&config, &producer, &msg_payload, &msg_key, &headers);
+            send_message(&config, &producer, &msg_payload, &msg_key, &headers)?;
 
             count = count + 1;
 
@@ -955,18 +990,20 @@ fn cmd_produce(matches: &ArgMatches) {
             headers = headers.add(&(*header).0.to_string(), &(*header).1.to_string());
         }
 
-        let key = get_key(&config);
-        send_message(&config, &producer, payload, &key, &headers);
+        let key = get_key(&config)?;
+        send_message(&config, &producer, payload, &key, &headers)?;
     }
 
     producer.flush(Duration::new(30, 0));
+
+    Ok(())
 }
 
 fn send_message(config: &ProduceConfig,
                 producer: &BaseProducer<KeyContext>,
                 payload: &Option<String>,
                 key: &Option<Vec<u8>>,
-                headers: &OwnedHeaders) {
+                headers: &OwnedHeaders) -> Result<()> {
     let delivery_opaque = Box::from(key.clone());
     let mut record = BaseRecord::<Vec<u8>, String, Box<Option<Vec<u8>>>>::with_opaque_to(
         &config.topic, delivery_opaque).headers(headers.clone());
@@ -983,25 +1020,20 @@ fn send_message(config: &ProduceConfig,
         record = record.payload(payload.as_ref().unwrap());
     };
 
-    match producer.send(record) {
-        Err(e) => panic!("{:?}", e),
-        _ => ()
-    }
+    producer.send(record).map_err(|e| GenericError(format!("Failed to send message: {}", e.0)))?;
+
+    Ok(())
 }
 
-fn get_key(config: &ProduceConfig) -> Option<Vec<u8>> {
+fn get_key(config: &ProduceConfig) -> Result<Option<Vec<u8>>> {
     if config.key_file.is_some() {
-        let content = config.key_file.as_ref().map(|f| read(f)).unwrap();
+        let content = config.key_file.as_ref().map(|f| read(f)).unwrap().map_err(|e| GenericError(format!("Failed to read key file: {}", e)))?;
 
-        if content.is_err() {
-            panic!("Failed to read key file");
-        }
-
-        Some(content.unwrap())
+        Ok(Some(content))
     } else if config.key.is_some() {
-        Some(config.key.as_ref().unwrap().to_string().into_bytes())
+        Ok(Some(config.key.as_ref().unwrap().to_string().into_bytes()))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -1016,7 +1048,7 @@ fn main() {
 
     generator.map(|gen| cmd_completions(gen, &mut create_cmd()));
 
-    match matches.subcommand() {
+    let result = match matches.subcommand() {
         Some((CMD_BROKERS, matches)) => cmd_brokers(&matches),
         Some((CMD_TOPICS, matches)) => cmd_topics(&matches),
         Some((CMD_GROUPS, matches)) => cmd_groups(&matches),
@@ -1024,6 +1056,10 @@ fn main() {
         Some((CMD_CONFIG, matches)) => cmd_config(&matches),
         Some((CMD_CONSUME, matches)) => cmd_consume(&matches),
         Some((CMD_PRODUCE, matches)) => cmd_produce(&matches),
-        _ => {}
+        _ => Ok(())
     };
+
+    if let Err(MilenaError::GenericError(error)) = result {
+        eprintln!("{}", error)
+    }
 }
