@@ -12,6 +12,7 @@ use std::time::Duration;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use clap::{ArgMatches, Command};
 use clap_complete::{generate, Shell};
+use colorize::AnsiColor;
 use futures::executor;
 use num_integer::div_mod_floor;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
@@ -33,7 +34,7 @@ use crate::args::{ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GRO
 use crate::args::create_cmd;
 use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, GroupConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
 use crate::error::{MilenaError, Result};
-use crate::MilenaError::GenericError;
+use crate::MilenaError::{GenericError, KafkaError};
 
 mod args;
 mod config;
@@ -297,7 +298,7 @@ impl ProducerContext for KeyContext {
                     }
                 }
             }
-            Err(e) => println!("Failed to deliver message: {:?}", e)
+            Err(e) => eprintln!("{}", format!("Failed to deliver message: {:?}", e).red())
         };
     }
 }
@@ -313,7 +314,7 @@ fn create_consumer(config: &BaseConfig, consumer_group: Option<String>) -> Resul
 
     consumer_group.map(|g| client_config.set(&"group.id", g.as_str()));
 
-    let client = client_config.create::<BaseConsumer>().map_err(|e| GenericError(format!("Failed to create consumer: {}", e)))?;
+    let client = client_config.create::<BaseConsumer>().map_err(MilenaError::from)?;
 
     Ok(client)
 }
@@ -321,14 +322,14 @@ fn create_consumer(config: &BaseConfig, consumer_group: Option<String>) -> Resul
 fn create_producer(config: &BaseConfig) -> Result<BaseProducer<KeyContext>> {
     let client_config = create_client_config(config);
     let client = client_config.create_with_context(KeyContext {})
-        .map_err(|e| GenericError(format!("Failed to create producer: {}", e)))?;
+        .map_err(MilenaError::from)?;
 
     Ok(client)
 }
 
 fn create_admin_client(config: &BaseConfig) -> Result<AdminClient<DefaultClientContext>> {
     let client_config = create_client_config(config);
-    let client = client_config.create().map_err(|e| GenericError(format!("Failed to create admin client: {}", e)))?;
+    let client = client_config.create().map_err(MilenaError::from)?;
 
     Ok(client)
 }
@@ -336,10 +337,10 @@ fn create_admin_client(config: &BaseConfig) -> Result<AdminClient<DefaultClientC
 fn create_client(config: &BaseConfig) -> Result<Client> {
     let client_config = create_client_config(config);
     let native_config = client_config.create_native_config()
-        .map_err(|e| GenericError(format!("Failed to create native config: {}", e)))?;
+        .map_err(MilenaError::from)?;
     let kafka_type = RDKafkaType::RD_KAFKA_PRODUCER;
     let client = Client::new(&client_config, native_config, kafka_type, DefaultClientContext)
-        .map_err(|e| GenericError(format!("Failed to create client: {}", e)))?;
+        .map_err(MilenaError::from)?;
 
     Ok(client)
 }
@@ -376,7 +377,7 @@ fn config_get(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>)
     let configs = executor::block_on(get_configs(&config, client, &options))?;
     let topics_configs = configs.iter().map(|result| {
         let resource = result.as_ref()
-            .map_err(|e| GenericError(format!("Failed to get result: {}", e)))?;
+            .map_err(MilenaError::from)?;
         let topic = match &resource.specifier {
             OwnedResourceSpecifier::Topic(name) => Ok(name.to_string()),
             _ => Err(GenericError(format!("Received configuration for unexpected resource")))
@@ -408,7 +409,7 @@ async fn get_configs(config: &ConfigConfig, admin_client: &AdminClient<DefaultCl
     let client = create_client(&config.base)?;
     let metadata = client
         .fetch_metadata(None, config.base.timeout)
-        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
+        .map_err(MilenaError::from)?;
     let topics: Vec<String> = match &config.topic {
         None => metadata.topics().iter().map(|m| m.name().to_string()).collect(),
         Some(topic) => metadata.topics().iter().filter(|t| t.name().eq(topic.as_str())).map(|m| m.name().to_string()).collect()
@@ -416,7 +417,7 @@ async fn get_configs(config: &ConfigConfig, admin_client: &AdminClient<DefaultCl
     let requested_topics = topics.iter().map(|n| ResourceSpecifier::Topic(n)).collect::<Vec<ResourceSpecifier>>();
     let result = admin_client.describe_configs(&requested_topics, &options)
         .await
-        .map_err(|e| GenericError(format!("Failed to get topic configuration: {}", e)))?;
+        .map_err(MilenaError::from)?;
 
     Ok(result)
 }
@@ -434,7 +435,7 @@ fn config_set(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>)
 
     match result {
         Ok(_) => println!("Configuration of topic {} altered", topic),
-        Err(e) => println!("Failed to alter topic configuration: {}", e)
+        Err(e) => return Err(MilenaError::from(e))
     };
 
     Ok(())
@@ -445,7 +446,7 @@ fn cmd_brokers(matches: &ArgMatches) -> Result<()> {
     let client: Client = create_client(&config)?;
     let metadata = client
         .fetch_metadata(None, config.timeout)
-        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
+        .map_err(MilenaError::from)?;
     let brokers: Vec<Broker> = metadata.brokers().iter()
         .map(|broker| Broker::new(broker.id(), broker.host().to_string(), broker.port()))
         .collect();
@@ -477,7 +478,7 @@ fn create_topic(config: &TopicConfig) -> Result<()> {
     let options = AdminOptions::new();
     let result = executor::block_on(client.create_topics(&[new_topic], &options));
 
-    evaluate_topic_result(topic, result, "created", "create");
+    evaluate_topic_result(topic, result, "created", "create")?;
 
     Ok(())
 }
@@ -488,7 +489,7 @@ fn delete_topic(config: &TopicConfig) -> Result<()> {
     let options = AdminOptions::new();
     let result = executor::block_on(client.delete_topics(&[topic], &options));
 
-    evaluate_topic_result(topic, result, "deleted", "delete");
+    evaluate_topic_result(topic, result, "deleted", "delete")?;
 
     Ok(())
 }
@@ -503,9 +504,9 @@ fn alter_topic(config: &TopicConfig) -> Result<()> {
         let new_partitions = NewPartitions::new(topic.as_str(), partitions as usize);
         let result = executor::block_on(client.create_partitions(&[new_partitions], &options));
 
-        evaluate_topic_result(topic, result, "altered", "alter")
+        evaluate_topic_result(topic, result, "altered", "alter")?
     } else {
-        println!("Topic {} unchanged. Please provide a new settings", topic);
+        println!("Topic {} unchanged. Please provide new settings", topic);
     }
 
     Ok(())
@@ -514,15 +515,15 @@ fn alter_topic(config: &TopicConfig) -> Result<()> {
 fn evaluate_topic_result(topic: &String,
                          result: KafkaResult<Vec<TopicResult>>,
                          done: &str,
-                         operation: &str) {
+                         operation: &str) -> Result<()> {
     match result {
-        Ok(results) => results.iter().for_each(|topic_result| {
+        Ok(results) => results.iter().map(|topic_result| {
             match topic_result {
-                Ok(_) => println!("Topic '{}' {}", topic, done),
-                Err((_, e)) => println!("Failed to {} topic '{}': {}", operation, topic, e)
+                Ok(_) => Ok(println!("Topic '{}' {}", topic, done)),
+                Err((_, e)) => Err(KafkaError(format!("Failed to {} topic '{}': {}", operation, topic, e)))
             }
-        }),
-        Err(e) => println!("Failed to {} topic '{}': {}", operation, topic, e)
+        }).collect(),
+        Err(e) => Err(KafkaError(format!("Failed to {} topic '{}': {}", operation, topic, e)))
     }
 }
 
@@ -530,7 +531,7 @@ fn show_topics(config: &TopicConfig) -> Result<()> {
     let consumer: BaseConsumer = create_consumer(&config.base, None)?;
     let metadata = consumer
         .fetch_metadata(None, config.base.timeout)
-        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
+        .map_err(MilenaError::from)?;
     let mut rec_topics = Vec::<Topic>::new();
     let topics: Vec<&MetadataTopic> = match &config.topic {
         None => metadata.topics().iter().collect(),
@@ -575,11 +576,11 @@ fn cmd_groups(matches: &ArgMatches) -> Result<()> {
     let client: BaseConsumer = create_consumer(&config.base, None)?;
 
     client.fetch_metadata(None, config.base.timeout)
-        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
+        .map_err(MilenaError::from)?;
 
     let group_list = client
         .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), config.base.timeout)
-        .map_err(|e| GenericError(format!("Failed to fetch group list: {}", e)))?;
+        .map_err(MilenaError::from)?;
     let mut rec_groups = Vec::<Group>::new();
 
     group_list.groups().iter().for_each(|group| {
@@ -610,10 +611,10 @@ fn show_offsets(config: &OffsetsConfig) -> Result<()> {
     let client: BaseConsumer = create_consumer(&config.base, None)?;
     let metadata = client
         .fetch_metadata(config.topic.as_ref().map(|topic| topic.as_str()), config.base.timeout)
-        .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
+        .map_err(MilenaError::from)?;
     let group_list = client
         .fetch_group_list(config.consumer_group.as_ref().map(|group| group.as_str()), config.base.timeout)
-        .map_err(|e| GenericError(format!("Failed to fetch group list: {}", e)))?;
+        .map_err(MilenaError::from)?;
     let groups: Vec<String> = group_list.groups().iter().map(|group| group.name().to_string()).collect();
     let topics: Vec<&MetadataTopic> = metadata.topics().iter().collect();
     let mut rec_group_offsets = Vec::<GroupOffsets>::new();
@@ -630,7 +631,7 @@ fn show_offsets(config: &OffsetsConfig) -> Result<()> {
         });
 
         let offsets = consumer.committed_offsets(topic_partitions, config.base.timeout)
-            .map_err(|e| GenericError(format!("Failed to fetch offsets: {}", e)))?;
+            .map_err(MilenaError::from)?;
         let available_topics: HashSet<_> = offsets.elements().iter().map(|elem| elem.topic().to_string()).collect();
 
         for topic_name in available_topics {
@@ -677,7 +678,7 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
     let earliest = config.earliest;
     let latest = config.latest;
     let metadata = client.fetch_metadata(Some(topic.as_str()), config.base.timeout)
-        .map_err(|e| GenericError(format!("Failed to fetch metadata for topic {}: {}", topic, e)))?;
+        .map_err(MilenaError::from)?;
     let metadata_partitions: HashSet<i32> = metadata.topics().iter().flat_map(|t| t.partitions().iter().map(|p| p.id())).collect();
 
     if config.partitions.as_ref().is_some() {
@@ -721,8 +722,8 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
         }
     }
 
-    client.store_offsets(&topic_partitions).map_err(|e| GenericError(format!("Failed to store offsets: {}", e)))?;
-    client.commit(&topic_partitions, CommitMode::Sync).map_err(|e| GenericError(format!("Failed to commit offsets: {}", e)))?;
+    client.store_offsets(&topic_partitions).map_err(MilenaError::from)?;
+    client.commit(&topic_partitions, CommitMode::Sync).map_err(MilenaError::from)?;
 
     Ok(())
 }
@@ -747,7 +748,7 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
     let mut messages = Vec::<ConsumedMessage>::new();
 
     match consumer.assign(&topic_partition) {
-        Err(e) => return Err(GenericError(format!("Failed to assign partitions: {}", e))),
+        Err(e) => return Err(MilenaError::from(e)),
         Ok(_) => ()
     }
 
@@ -820,7 +821,7 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Resu
     } else if latest {
         if all_partitions {
             let metadata = consumer.fetch_metadata(Some(topic), config.base.timeout)
-                .map_err(|e| GenericError(format!("Failed to fetch metadata: {}", e)))?;
+                .map_err(MilenaError::from)?;
             let topics = metadata.topics().iter().filter(|t| t.name().eq(topic)).collect::<Vec<&MetadataTopic>>();
             let topics_meta = topics.get(0).unwrap();
 
@@ -863,7 +864,7 @@ fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> (i
 }
 
 fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> Result<Option<ConsumedMessage<'a>>> {
-    result.as_ref().map_err(|e| GenericError(format!("Poll failed with error: {}", e)))?;
+    result.as_ref().map_err(MilenaError::from)?;
 
     let message = result.as_ref().unwrap();
     let headers = match config.no_headers {
@@ -1020,7 +1021,7 @@ fn send_message(config: &ProduceConfig,
         record = record.payload(payload.as_ref().unwrap());
     };
 
-    producer.send(record).map_err(|e| GenericError(format!("Failed to send message: {}", e.0)))?;
+    producer.send(record).map_err(|(e, _)| MilenaError::from(e))?;
 
     Ok(())
 }
@@ -1059,7 +1060,7 @@ fn main() {
         _ => Ok(())
     };
 
-    if let Err(MilenaError::GenericError(error)) = result {
-        eprintln!("{}", error)
+    if let Err(GenericError(error)) = result {
+        eprintln!("{}", format!("{}", error.as_str()).red());
     }
 }

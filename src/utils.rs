@@ -37,29 +37,3 @@ impl<T, E> Swap for Vec<Result<T, E>> {
         };
     }
 }
-
-// impl<T, E> Swap for Option<Vec<Result<T, E>>> {
-//     type Result = Result<Option<Vec<T>>, Vec<E>>;
-//
-//     fn swap(self) -> Self::Result {
-//         if let Some(vec) = self {
-//             let mut values = Vec::<T>::new();
-//             let mut errors = Vec::<E>::new();
-//
-//             for result in vec {
-//                 match result {
-//                     Ok(value) => values.push(value),
-//                     Err(error) => errors.push(error)
-//                 }
-//             }
-//
-//             return if errors.is_empty() {
-//                 Ok(Some(values))
-//             } else {
-//                 Err(errors)
-//             };
-//         } else {
-//             Ok(None)
-//         }
-//     }
-// }
