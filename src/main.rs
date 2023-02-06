@@ -763,7 +763,7 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
 
     loop {
         if count > 0 && count == current_count {
-            return Ok(());
+            break;
         }
 
         match consumer.poll(timeout) {
