@@ -7,7 +7,7 @@ use clap::ArgMatches;
 use regex::Regex;
 
 use crate::{DEFAULT_GROUP_ID, error};
-use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADER_REGEX, ARG_HEADERS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
+use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADER_REGEX, ARG_HEADERS, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::error::MilenaError::GenericError;
 use crate::error::Result;
 use crate::MilenaError::ArgError;
@@ -80,6 +80,7 @@ pub struct ConfigConfig {
     pub mode: ConfigMode,
     pub pattern: Option<String>,
     pub values: Option<Vec<(String, String)>>,
+    pub include_defaults: bool,
 }
 
 impl ConfigConfig {
@@ -100,8 +101,9 @@ impl ConfigConfig {
             }
             None => None
         };
+        let include_defaults = matches.contains_id(ARG_INCLUDE_DEFAULTS);
 
-        Ok(Self { base, topic, mode, pattern, values })
+        Ok(Self { base, topic, mode, pattern, values, include_defaults })
     }
 }
 
@@ -385,7 +387,7 @@ impl ProduceConfig {
         let headers_string = matches.values_of(ARG_HEADERS);
         let result_headers = headers_string
             .map(|values| values.map(|hs| split_name_value_pair("header", hs))
-            .collect::<Vec<Result<(String, String)>>>().swap());
+                .collect::<Vec<Result<(String, String)>>>().swap());
 
         let headers = match result_headers {
             None => Vec::new(),
@@ -424,7 +426,7 @@ fn split_name_value_pair(description: &str, nv_pair: &str) -> Result<(String, St
 fn test_split_name_value_pair() {
     assert_eq!(Ok(("a".to_string(), "b".to_string())), split_name_value_pair("", "a=b"));
     assert_eq!(Ok(("a".to_string(), "b=c".to_string())), split_name_value_pair("", "a=b=c"));
-    assert!( split_name_value_pair("", "a=").is_err());
-    assert!( split_name_value_pair("", "a").is_err());
-    assert!( split_name_value_pair("", "").is_err());
+    assert!(split_name_value_pair("", "a=").is_err());
+    assert!(split_name_value_pair("", "a").is_err());
+    assert!(split_name_value_pair("", "").is_err());
 }

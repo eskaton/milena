@@ -50,6 +50,7 @@ pub const ARG_SET: &'static str = "set";
 pub const ARG_JSON_BATCH: &'static str = "json-batch";
 pub const ARG_BATCH_SIZE: &'static str = "batch-size";
 pub const ARG_TIMEOUT: &'static str = "timeout";
+pub const ARG_INCLUDE_DEFAULTS: &'static str = "include-defaults";
 
 fn add_global_args(app: Command) -> Command {
     let arg_servers: Arg = Arg::with_name(ARG_BOOTSTRAP_SERVER)
@@ -240,6 +241,11 @@ pub fn create_cmd() -> Command<'static> {
         .conflicts_with(ARG_GET)
         .requires_all(&[ARG_TOPIC]);
 
+    let arg_include_defaults = Arg::with_name(ARG_INCLUDE_DEFAULTS)
+        .help("Also show default values")
+        .long(ARG_INCLUDE_DEFAULTS)
+        .requires(ARG_GET);
+
     let arg_json_batch_consumer = Arg::with_name(ARG_JSON_BATCH)
         .long(ARG_JSON_BATCH)
         .conflicts_with(ARG_FOLLOW)
@@ -337,7 +343,8 @@ pub fn create_cmd() -> Command<'static> {
             .about("Display and alter topic configuration")
             .arg(&arg_topic)
             .arg(&arg_set)
-            .arg(&arg_get)))
+            .arg(&arg_get)
+            .arg(&arg_include_defaults)))
         .subcommand(add_global_args(Command::new(CMD_CONSUME)
             .about("Consume from a topic")
             .arg(&arg_topic.clone().required(true))

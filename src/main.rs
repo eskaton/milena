@@ -384,11 +384,14 @@ fn config_get(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>)
         }?;
         let pattern = config.pattern.as_ref();
         let configs = resource.entries.iter()
-            .filter(|entry| {
-                match &pattern {
-                    None => true,
-                    Some(p) => entry.name.to_string().contains(*p)
-                }
+            .filter(|entry| match &pattern {
+                None => true,
+                Some(p) => entry.name.to_string().contains(*p)
+            }
+            )
+            .filter(|entry| match (entry.is_default, config.include_defaults) {
+                (true, false) => false,
+                _ => true
             })
             .map(|entry| {
                 let name = entry.name.to_string();
