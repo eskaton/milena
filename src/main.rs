@@ -746,6 +746,7 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
     let consumer: BaseConsumer = create_consumer(&config.base, consumer_group)?;
     let mut count = config.count.unwrap_or(0);
     let json_batch = config.json_batch;
+    let follow = config.follow;
     let mut current_count = 0;
     let topic_partition = get_topic_partitions(&consumer, &config)?;
     let mut messages = Vec::<ConsumedMessage>::new();
@@ -755,7 +756,7 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
         Ok(_) => ()
     }
 
-    let timeout = match config.follow {
+    let timeout = match follow {
         true => None,
         false => Some(Duration::new(1, 0))
     };
@@ -765,7 +766,7 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
     }
 
     loop {
-        if count > 0 && count == current_count {
+        if count > 0 && count == current_count && !follow {
             break;
         }
 
