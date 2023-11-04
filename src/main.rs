@@ -34,7 +34,7 @@ use crate::args::{ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GRO
 use crate::args::create_cmd;
 use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, GroupConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
 use crate::error::{MilenaError, Result};
-use crate::MilenaError::{GenericError, KafkaError};
+use crate::MilenaError::{ArgError, GenericError, KafkaError};
 
 mod args;
 mod config;
@@ -541,6 +541,10 @@ fn show_topics(config: &TopicConfig) -> Result<()> {
         Some(topic) => metadata.topics().iter().filter(|t| t.name().eq(topic)).collect()
     };
 
+    if config.topic.is_some() && topics.is_empty() {
+        return Err(GenericError(format!("Topic {} does not exist", &config.topic.as_ref().unwrap())));
+    }
+
     for topic in topics {
         let mut rec_topic = Topic::new(topic.name().to_string());
 
@@ -688,9 +692,13 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
         let partitions = config.partitions.as_ref().unwrap();
 
         if earliest {
-            partitions.iter().for_each(|partition| add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Earliest));
+            for partition in partitions {
+                add_offset(&client, &mut topic_partitions, topic, *partition, OffsetPosition::Earliest)?;
+            }
         } else if latest {
-            partitions.iter().for_each(|partition| add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Latest));
+            for partition in partitions {
+                add_offset(&client, &mut topic_partitions, topic, *partition, OffsetPosition::Latest)?;
+            }
         } else {
             let offsets = config.offsets.as_ref().unwrap();
 
@@ -710,9 +718,13 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
         }
     } else {
         if earliest {
-            metadata_partitions.iter().for_each(|partition| add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Earliest));
+            for partition in metadata_partitions {
+                add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Earliest)?;
+            }
         } else if latest {
-            metadata_partitions.iter().for_each(|partition| add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Latest));
+            for partition in metadata_partitions {
+                add_offset(&client, &mut topic_partitions, topic, partition, OffsetPosition::Latest)?;
+            }
         } else {
             let offsets = config.offsets.as_ref().unwrap();
 
@@ -731,13 +743,15 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
     Ok(())
 }
 
-fn add_offset(client: &BaseConsumer, topic_partitions: &mut TopicPartitionList, topic: &String, partition: &i32, position: OffsetPosition) {
-    let (low, high) = get_watermarks(&client, topic, *partition);
+fn add_offset(client: &BaseConsumer, topic_partitions: &mut TopicPartitionList, topic: &String, partition: i32, position: OffsetPosition) -> Result<()> {
+    let (low, high) = get_watermarks(&client, topic, partition)?;
 
-    topic_partitions.add_partition_offset(topic.as_str(), *partition, Offset(match position {
+    topic_partitions.add_partition_offset(topic.as_str(), partition, Offset(match position {
         OffsetPosition::Earliest => low,
         OffsetPosition::Latest => high
     }));
+
+    return Ok(());
 }
 
 fn cmd_consume(matches: &ArgMatches) -> Result<()> {
@@ -813,7 +827,7 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Resu
 
     if offsets.is_some() {
         for (&partition, &offset) in config.partitions.iter().zip(offsets.as_ref().unwrap().iter()) {
-            let (low, high) = get_watermarks(consumer, topic, partition);
+            let (low, high) = get_watermarks(consumer, topic, partition)?;
 
             if offset < low || offset > high {
                 return Err(GenericError(format!("Invalid offset {} for partition {}. Must be in range [{}, {}]",
@@ -832,39 +846,43 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Resu
             partitions = topics_meta.partitions().iter().map(|mdp| mdp.id()).collect::<Vec<i32>>();
         }
 
-        partitions.iter().for_each(|p| {
-            let (low, high) = get_watermarks(consumer, topic, *p);
+        for partition in partitions {
+            let (low, high) = get_watermarks(consumer, topic, partition)?;
 
             if high != -1 {
                 let offset = Offset(max(low, high));
 
-                topic_partition.add_partition_offset(&topic, *p, offset);
+                topic_partition.add_partition_offset(&topic, partition, offset);
             }
-        });
+        }
     } else if tail.is_some() {
-        partitions.iter().for_each(|p| {
-            let (low, high) = get_watermarks(consumer, topic, *p);
+        for partition in partitions {
+            let (low, high) = get_watermarks(consumer, topic, partition)?;
 
             if high != -1 {
                 let offset = Offset(max(low, high - tail.unwrap()));
 
-                topic_partition.add_partition_offset(&topic, *p, offset);
+                topic_partition.add_partition_offset(&topic, partition, offset);
             }
-        });
+        }
     } else {
-        config.partitions.iter().for_each(|p| {
-            let (low, _high) = get_watermarks(consumer, topic, *p);
+        for partition in &config.partitions {
+            let (low, _high) = get_watermarks(consumer, topic, *partition)?;
 
-            topic_partition.add_partition_offset(&topic, *p, Offset(low));
-        });
+            topic_partition.add_partition_offset(&topic, *partition, Offset(low));
+        }
     }
 
     Ok(topic_partition)
 }
 
-fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> (i64, i64) {
-    consumer.fetch_watermarks(topic, partition, Duration::from_secs(1))
-        .unwrap_or((-1, -1))
+fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> Result<(i64, i64)> {
+    let result = consumer.fetch_watermarks(topic, partition, Duration::from_secs(1));
+
+    match result {
+        Ok(result) => Ok(result),
+        Err(e) => Err(KafkaError(format!("{}", e)))
+    }
 }
 
 fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> Result<Option<ConsumedMessage<'a>>> {
@@ -1064,7 +1082,12 @@ fn main() {
         _ => Ok(())
     };
 
+
     if let Err(GenericError(error)) = result {
+        eprintln!("{}", format!("{}", error.as_str()).red());
+    } else if let Err(KafkaError(error)) = result {
+        eprintln!("{}", format!("{}", error.as_str()).red());
+    } else if let Err(ArgError(error)) = result {
         eprintln!("{}", format!("{}", error.as_str()).red());
     }
 }
