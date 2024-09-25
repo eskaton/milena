@@ -1,4 +1,3 @@
-use rdkafka::error::RDKafkaError;
 use crate::GenericError;
 use crate::MilenaError::{ArgError, KafkaError};
 
@@ -33,22 +32,29 @@ impl From<Vec<MilenaError>> for MilenaError {
     }
 }
 
-impl From<rdkafka::error::KafkaError> for MilenaError  {
+impl From<rdkafka::error::KafkaError> for MilenaError {
     fn from(error: rdkafka::error::KafkaError) -> Self {
         KafkaError(format!("{}", error))
     }
 }
 
-impl From<&RDKafkaError> for MilenaError  {
-    fn from(error: &RDKafkaError) -> Self {
+impl From<&rdkafka::error::RDKafkaError> for MilenaError {
+    fn from(error: &rdkafka::error::RDKafkaError) -> Self {
         KafkaError(format!("{}", error))
     }
 }
 
-impl From<&rdkafka::error::KafkaError> for MilenaError  {
+impl From<&rdkafka::error::KafkaError> for MilenaError {
     fn from(error: &rdkafka::error::KafkaError) -> Self {
         KafkaError(format!("{}", error))
     }
 }
+
+impl From<&rdkafka::error::RDKafkaErrorCode> for MilenaError {
+    fn from(error: &rdkafka::error::RDKafkaErrorCode) -> Self {
+        KafkaError(format!("{}", error))
+    }
+}
+
 
 pub type Result<T> = std::result::Result<T, MilenaError>;

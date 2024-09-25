@@ -1,13 +1,12 @@
 #[macro_use(crate_version, value_parser)]
 extern crate clap;
 
-use std::{env, io};
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::fs::{read, read_to_string};
-use std::iter::FromIterator;
 use std::time::Duration;
+use std::{env, io};
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use clap::{ArgMatches, Command};
@@ -15,24 +14,25 @@ use clap_complete::{generate, Shell};
 use colorize::AnsiColor;
 use futures::executor;
 use num_integer::div_mod_floor;
-use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
-use rdkafka::admin::{AdminClient, AdminOptions, AlterConfig, ConfigResourceResult, NewPartitions, NewTopic, OwnedResourceSpecifier, ResourceSpecifier, TopicResult};
 use rdkafka::admin::TopicReplication::Fixed;
+use rdkafka::admin::{AdminClient, AdminOptions, AlterConfig, ConfigResourceResult, NewPartitions, NewTopic, OwnedResourceSpecifier, ResourceSpecifier, TopicResult};
 use rdkafka::client::{Client, DefaultClientContext};
 use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer};
 use rdkafka::error::KafkaResult;
-use rdkafka::message::{BorrowedHeaders, BorrowedMessage, DeliveryResult, Headers, Message, OwnedHeaders};
 use rdkafka::message::Timestamp::CreateTime;
+use rdkafka::message::{BorrowedHeaders, BorrowedMessage, DeliveryResult, Headers, Message, OwnedHeaders};
 use rdkafka::metadata::MetadataTopic;
-use rdkafka::producer::{BaseProducer, BaseRecord, ProducerContext};
+use rdkafka::producer::{BaseProducer, BaseRecord, Producer, ProducerContext};
 use rdkafka::topic_partition_list::Offset::Offset;
 use rdkafka::types::RDKafkaType;
+use rdkafka::util::Timeout;
+use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::args::{ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
 use crate::args::create_cmd;
-use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, GroupConfig, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
+use crate::args::{ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
+use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, GroupConfig, GroupMode, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
 use crate::error::{MilenaError, Result};
 use crate::MilenaError::{ArgError, GenericError, KafkaError};
 
@@ -287,7 +287,7 @@ impl ProducerContext for KeyContext {
     fn delivery(&self, delivery_result: &DeliveryResult, delivery_opaque: Self::DeliveryOpaque) {
         match delivery_result {
             Ok(_) => {
-                match delivery_opaque.borrow() {
+                match delivery_opaque.as_ref() {
                     None => println!("Message successfully delivered"),
                     Some(key) => {
                         match String::from_utf8(key.to_vec()) {
@@ -312,7 +312,7 @@ fn escape_newlines(string: &String) -> String {
 fn create_consumer(config: &BaseConfig, consumer_group: Option<String>) -> Result<BaseConsumer> {
     let mut client_config = create_client_config(config);
 
-    consumer_group.map(|g| client_config.set(&"group.id", g.as_str()));
+    consumer_group.map(|g| client_config.set("group.id", g.as_str()));
 
     let client = client_config.create::<BaseConsumer>().map_err(MilenaError::from)?;
 
@@ -380,7 +380,7 @@ fn config_get(config: &ConfigConfig, client: &AdminClient<DefaultClientContext>)
             .map_err(MilenaError::from)?;
         let topic = match &resource.specifier {
             OwnedResourceSpecifier::Topic(name) => Ok(name.to_string()),
-            _ => Err(GenericError(format!("Received configuration for unexpected resource")))
+            _ => Err(GenericError("Received configuration for unexpected resource".to_string()))
         }?;
         let pattern = config.pattern.as_ref();
         let configs = resource.entries.iter()
@@ -580,6 +580,33 @@ fn show_topics(config: &TopicConfig) -> Result<()> {
 
 fn cmd_groups(matches: &ArgMatches) -> Result<()> {
     let config = GroupConfig::new(matches)?;
+
+    match config.mode {
+        GroupMode::DELETE => delete_group(&config),
+        _ => show_groups(&config)
+    }?;
+
+    Ok(())
+}
+
+fn delete_group(config: &GroupConfig) -> Result<()> {
+    let client = create_admin_client(&config.base)?;
+    let consumer_group = config.consumer_group.as_ref().unwrap();
+    let options = AdminOptions::new();
+    let result = executor::block_on(client.delete_groups(&[consumer_group], &options));
+
+    match result {
+        Ok(results) => results.iter().map(|group_result| {
+            match group_result {
+                Ok(_) => Ok(println!("Group '{}' deleted", consumer_group)),
+                Err((_, e)) => Err(KafkaError(format!("Failed to delete group '{}': {}", consumer_group, e)))
+            }
+        }).collect(),
+        Err(e) => Err(KafkaError(format!("Failed to delete group '{}': {}", consumer_group, e)))
+    }
+}
+
+fn show_groups(config: &GroupConfig) -> Result<()> {
     let client: BaseConsumer = create_consumer(&config.base, None)?;
 
     client.fetch_metadata(None, config.base.timeout)
@@ -714,7 +741,7 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
                 return Err(GenericError(format!("Invalid partitions: {:?}", difference)));
             }
 
-            partitions.iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), *p, Offset(*o)));
+            partitions.iter().zip(offsets.iter()).try_for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), *p, Offset(*o)))?;
         }
     } else {
         if earliest {
@@ -733,7 +760,7 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
                                                 offsets.len(), metadata_partitions.len())));
             }
 
-            (0 as i32..offsets.len() as i32).into_iter().zip(offsets.iter()).for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), p, Offset(*o)))
+            (0i32..offsets.len() as i32).into_iter().zip(offsets.iter()).try_for_each(|(p, o)| topic_partitions.add_partition_offset(topic.as_str(), p, Offset(*o)))?
         }
     }
 
@@ -743,15 +770,13 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
     Ok(())
 }
 
-fn add_offset(client: &BaseConsumer, topic_partitions: &mut TopicPartitionList, topic: &String, partition: i32, position: OffsetPosition) -> Result<()> {
-    let (low, high) = get_watermarks(&client, topic, partition)?;
+fn add_offset(client: &BaseConsumer, topic_partitions: &mut TopicPartitionList, topic: &String, partition: i32, position: OffsetPosition) -> KafkaResult<()> {
+    let (low, high) = get_watermarks(&client, topic, partition).unwrap();
 
     topic_partitions.add_partition_offset(topic.as_str(), partition, Offset(match position {
         OffsetPosition::Earliest => low,
         OffsetPosition::Latest => high
-    }));
-
-    return Ok(());
+    }))
 }
 
 fn cmd_consume(matches: &ArgMatches) -> Result<()> {
@@ -834,7 +859,7 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Resu
                                                 offset, partition, low, high)));
             }
 
-            topic_partition.add_partition_offset(&topic, partition, Offset(offset));
+            topic_partition.add_partition_offset(&topic, partition, Offset(offset))?;
         }
     } else if latest {
         if all_partitions {
@@ -852,7 +877,7 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Resu
             if high != -1 {
                 let offset = Offset(max(low, high));
 
-                topic_partition.add_partition_offset(&topic, partition, offset);
+                topic_partition.add_partition_offset(&topic, partition, offset)?;
             }
         }
     } else if tail.is_some() {
@@ -862,14 +887,14 @@ fn get_topic_partitions(consumer: &BaseConsumer, config: &ConsumeConfig) -> Resu
             if high != -1 {
                 let offset = Offset(max(low, high - tail.unwrap()));
 
-                topic_partition.add_partition_offset(&topic, partition, offset);
+                topic_partition.add_partition_offset(&topic, partition, offset)?;
             }
         }
     } else {
         for partition in &config.partitions {
             let (low, _high) = get_watermarks(consumer, topic, *partition)?;
 
-            topic_partition.add_partition_offset(&topic, *partition, Offset(low));
+            topic_partition.add_partition_offset(&topic, *partition, Offset(low))?;
         }
     }
 
@@ -888,7 +913,7 @@ fn get_watermarks(consumer: &BaseConsumer, topic: &String, partition: i32) -> Re
 fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<BorrowedMessage>) -> Result<Option<ConsumedMessage<'a>>> {
     result.as_ref().map_err(MilenaError::from)?;
 
-    let message = result.as_ref().unwrap();
+    let message = result.as_ref()?;
     let headers = match config.no_headers {
         true => None,
         false => message.headers().map(|h| get_headers(h))
@@ -968,11 +993,13 @@ fn get_headers(borrowed_headers: &BorrowedHeaders) -> Vec<Header> {
         get_header(borrowed_headers, idx).map(|h| headers.push(h));
     }
 
-    return headers;
+    headers
 }
 
 fn get_header(borrowed_headers: &BorrowedHeaders, idx: usize) -> Option<Header> {
-    borrowed_headers.get(idx).map(|h| Header::new(h.0.to_string(), String::from_utf8_lossy(h.1).to_string()))
+    let kafka_header = borrowed_headers.get(idx);
+
+    Some(Header::new(kafka_header.key.to_string(), String::from_utf8_lossy(kafka_header.value.unwrap_or(&[])).to_string()))
 }
 
 fn cmd_produce(matches: &ArgMatches) -> Result<()> {
@@ -994,7 +1021,7 @@ fn cmd_produce(matches: &ArgMatches) -> Result<()> {
 
             if msg_headers.is_some() {
                 for header in msg_headers.unwrap() {
-                    headers = headers.add(header.key.as_str(), &header.value.to_string());
+                    headers = headers.insert(rdkafka::message::Header { key: header.key.as_str(), value: Some(header.value.as_str()) });
                 }
             }
 
@@ -1003,21 +1030,21 @@ fn cmd_produce(matches: &ArgMatches) -> Result<()> {
             count = count + 1;
 
             if count % batch_size == 0 {
-                producer.flush(Duration::new(30, 0));
+                producer.flush(Timeout::After(Duration::new(30, 0)))?;
             }
         }
     } else {
         let mut headers = OwnedHeaders::new();
 
         for header in config.headers.iter() {
-            headers = headers.add(&(*header).0.to_string(), &(*header).1.to_string());
+            headers = headers.insert(rdkafka::message::Header { key: (*header).0.as_str(), value: Some((*header).1.as_str()) });
         }
 
         let key = get_key(&config)?;
         send_message(&config, &producer, payload, &key, &headers)?;
     }
 
-    producer.flush(Duration::new(30, 0));
+    producer.flush(Timeout::After(Duration::new(30, 0)))?;
 
     Ok(())
 }

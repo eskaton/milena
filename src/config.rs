@@ -54,24 +54,38 @@ impl BaseConfig {
     }
 }
 
+
 #[derive(PartialEq)]
-pub enum ConfigMode {
-    GET,
-    SET,
+pub enum GroupMode {
+    LIST,
+    DELETE,
 }
 
 pub struct GroupConfig {
     pub base: BaseConfig,
+    pub mode: GroupMode,
     pub consumer_group: Option<String>,
 }
 
 impl GroupConfig {
     pub fn new(matches: &ArgMatches) -> error::Result<Self> {
+        let (matches, mode) = match matches.subcommand() {
+            Some((OP_LIST, matches)) => (matches, GroupMode::LIST),
+            Some((OP_DELETE, matches)) => (matches, GroupMode::DELETE),
+            _ => panic!("Invalid subcommand")
+        };
+
         let base = BaseConfig::new(matches)?;
         let consumer_group = matches.value_of(ARG_CONSUMER_GROUP).map(|s| s.to_string());
 
-        Ok(Self { base, consumer_group })
+        Ok(Self { base, mode, consumer_group })
     }
+}
+
+#[derive(PartialEq)]
+pub enum ConfigMode {
+    GET,
+    SET,
 }
 
 pub struct ConfigConfig {
