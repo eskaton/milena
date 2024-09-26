@@ -30,10 +30,10 @@ impl<T, E> Swap for Vec<Result<T, E>> {
             }
         }
 
-        return if errors.is_empty() {
+        if errors.is_empty() {
             Ok(values)
         } else {
             Err(errors)
-        };
+        }
     }
 }

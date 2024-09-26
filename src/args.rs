@@ -83,10 +83,10 @@ fn add_global_args(app: Command) -> Command {
         .value_name("TIMEOUT")
         .default_value("3000");
 
-    return app.arg(&arg_servers)
+    app.arg(&arg_servers)
         .arg(&arg_extra_properties)
         .arg(&arg_extra_properties_file)
-        .arg(&arg_timeout);
+        .arg(&arg_timeout)
 }
 
 pub fn create_cmd() -> Command<'static> {
@@ -287,7 +287,7 @@ pub fn create_cmd() -> Command<'static> {
         .short('l')
         .long(ARG_LAGS);
 
-    return Command::new("milena")
+    Command::new("milena")
         .version(crate_version!())
         .propagate_version(false)
         .arg(arg_completions)
@@ -381,5 +381,5 @@ pub fn create_cmd() -> Command<'static> {
             .arg(&arg_payload_file)
             .arg(&arg_json_batch_producer))
             .arg(&arg_batch_size))
-        .setting(AppSettings::ArgRequiredElseHelp);
+        .setting(AppSettings::ArgRequiredElseHelp)
 }

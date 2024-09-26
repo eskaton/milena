@@ -8,13 +8,13 @@ edition = "2021"
 rdkafka = { version = "0.36.2", features = ["gssapi"] }
 clap = { version= "3.2.16", features = ["cargo"] }
 clap_complete = "3.2.3"
-serde_json = "1.0.61"
+serde_json = "1.0.128"
 dotproperties = "0.1.0"
-serde = { version = "1.0.118", features = ["derive"] }
-chrono = { version = "0.4.19", features = ["serde"] }
-num-integer = "0.1.44"
-futures = "0.3.9"
-regex = "1.6.0"
+serde = { version = "1.0.210", features = ["derive"] }
+chrono = { version = "0.4.38", features = ["serde"] }
+num-integer = "0.1.46"
+futures = "0.3.30"
+regex = "1.10.6"
 colorize = "0"
 
 [profile.release]

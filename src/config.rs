@@ -6,12 +6,12 @@ use chrono::DateTime;
 use clap::ArgMatches;
 use regex::Regex;
 
-use crate::{DEFAULT_GROUP_ID, error};
-use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADER_REGEX, ARG_HEADERS, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
+use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_HEADER_REGEX, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::error::MilenaError::GenericError;
 use crate::error::Result;
-use crate::MilenaError::ArgError;
 use crate::utils::Swap;
+use crate::MilenaError::ArgError;
+use crate::DEFAULT_GROUP_ID;
 
 pub struct BaseConfig {
     pub servers: Vec<String>,
@@ -50,7 +50,7 @@ impl BaseConfig {
             return Ok(Option::from(dotproperties::parse_from_file(path).unwrap()));
         }
 
-        return Ok(None);
+        Ok(None)
     }
 }
 
@@ -68,7 +68,7 @@ pub struct GroupConfig {
 }
 
 impl GroupConfig {
-    pub fn new(matches: &ArgMatches) -> error::Result<Self> {
+    pub fn new(matches: &ArgMatches) -> Result<Self> {
         let (matches, mode) = match matches.subcommand() {
             Some((OP_LIST, matches)) => (matches, GroupMode::LIST),
             Some((OP_DELETE, matches)) => (matches, GroupMode::DELETE),
@@ -344,7 +344,7 @@ fn parse_timestamp(s: &str) -> Result<i64> {
     let ts = DateTime::parse_from_rfc3339(s)
         .map_err(|e| ArgError(format!("Invalid ISO-8601 timestamp '{}': {}", s, e)))?;
 
-    Ok(ts.timestamp_nanos())
+    Ok(ts.timestamp_nanos_opt().unwrap())
 }
 
 fn parse_partition(str: &String) -> Result<i32> {

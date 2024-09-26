@@ -8,7 +8,7 @@ use std::fs::{read, read_to_string};
 use std::time::Duration;
 use std::{env, io};
 
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use clap::{ArgMatches, Command};
 use clap_complete::{generate, Shell};
 use colorize::AnsiColor;
@@ -240,8 +240,7 @@ impl Timestamp {
 
         let millis = timestamp.to_millis().unwrap();
         let (secs, msecs) = div_mod_floor(millis, 1000);
-        let naive_date_time = NaiveDateTime::from_timestamp(secs, msecs as u32 * 1_000_000);
-        let time = Utc.from_utc_datetime(&naive_date_time);
+        let time = DateTime::from_timestamp(secs, msecs as u32 * 1_000_000).unwrap();
 
         Self { timestamp_type, time }
     }
@@ -930,7 +929,7 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
         if timestamp.is_none() {
             return Ok(None);
         } else {
-            if config.timestamp_before.unwrap() <= timestamp.as_ref().unwrap().time.timestamp_nanos() {
+            if config.timestamp_before.unwrap() <= timestamp.as_ref().unwrap().time.timestamp_nanos_opt().unwrap() {
                 return Ok(None);
             }
         }
@@ -940,7 +939,7 @@ fn handle_fetch_result<'a>(config: &ConsumeConfig, result: &'a KafkaResult<Borro
         if timestamp.is_none() {
             return Ok(None);
         } else {
-            if config.timestamp_after.unwrap() >= timestamp.as_ref().unwrap().time.timestamp_nanos() {
+            if config.timestamp_after.unwrap() >= timestamp.as_ref().unwrap().time.timestamp_nanos_opt().unwrap() {
                 return Ok(None);
             }
         }
