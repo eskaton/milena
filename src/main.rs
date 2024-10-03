@@ -2,7 +2,7 @@
 extern crate clap;
 
 use std::borrow::Cow;
-use std::cmp::max;
+use std::cmp::{max, PartialEq};
 use std::collections::{HashMap, HashSet};
 use std::fs::{read, read_to_string};
 use std::time::Duration;
@@ -32,7 +32,7 @@ use serde_json::json;
 
 use crate::args::create_cmd;
 use crate::args::{ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE, CMD_TOPICS};
-use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConsumeConfig, GroupConfig, GroupMode, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode};
+use crate::config::{BaseConfig, ConfigConfig, ConfigMode, ConfigType, ConsumeConfig, GroupConfig, GroupMode, OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode, CONFIG_PROPERTIES};
 use crate::error::{MilenaError, Result};
 use crate::MilenaError::{ArgError, GenericError, KafkaError};
 
@@ -309,7 +309,7 @@ fn escape_newlines(string: &String) -> String {
 }
 
 fn create_consumer(config: &BaseConfig, consumer_group: Option<String>) -> Result<BaseConsumer> {
-    let mut client_config = create_client_config(config);
+    let mut client_config = create_client_config(config, ConfigType::Consumer);
 
     consumer_group.map(|g| client_config.set("group.id", g.as_str()));
 
@@ -319,7 +319,7 @@ fn create_consumer(config: &BaseConfig, consumer_group: Option<String>) -> Resul
 }
 
 fn create_producer(config: &BaseConfig) -> Result<BaseProducer<KeyContext>> {
-    let client_config = create_client_config(config);
+    let client_config = create_client_config(config, ConfigType::Consumer);
     let client = client_config.create_with_context(KeyContext {})
         .map_err(MilenaError::from)?;
 
@@ -327,14 +327,14 @@ fn create_producer(config: &BaseConfig) -> Result<BaseProducer<KeyContext>> {
 }
 
 fn create_admin_client(config: &BaseConfig) -> Result<AdminClient<DefaultClientContext>> {
-    let client_config = create_client_config(config);
+    let client_config = create_client_config(config, ConfigType::Both);
     let client = client_config.create().map_err(MilenaError::from)?;
 
     Ok(client)
 }
 
 fn create_client(config: &BaseConfig) -> Result<Client> {
-    let client_config = create_client_config(config);
+    let client_config = create_client_config(config, ConfigType::Both);
     let native_config = client_config.create_native_config()
         .map_err(MilenaError::from)?;
     let kafka_type = RDKafkaType::RD_KAFKA_PRODUCER;
@@ -344,16 +344,25 @@ fn create_client(config: &BaseConfig) -> Result<Client> {
     Ok(client)
 }
 
-fn create_client_config(config: &BaseConfig) -> ClientConfig {
+fn create_client_config(config: &BaseConfig, config_type: ConfigType) -> ClientConfig {
     let servers: String = config.servers.join(",");
     let mut client_config: ClientConfig = ClientConfig::new();
 
     client_config.set(&"bootstrap.servers".to_string(), &servers);
-    client_config.set(&"enable.auto.offset.store".to_string(), "false");
+
+    if config_type == ConfigType::Consumer {
+        client_config.set(&"enable.auto.offset.store".to_string(), "false");
+    }
 
     match &config.properties {
         Some(properties) => properties.iter().for_each(|p| {
-            client_config.set(&*p.0, &*p.1);
+            let maybe_config_type = CONFIG_PROPERTIES.get(&*p.0);
+
+            if maybe_config_type.is_none()
+                || *maybe_config_type.unwrap() == config_type
+                || *maybe_config_type.unwrap() == ConfigType::Both {
+                client_config.set(&*p.0, &*p.1);
+            }
         }),
         None => ()
     };

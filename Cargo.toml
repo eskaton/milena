@@ -16,6 +16,7 @@ num-integer = "0.1.46"
 futures = "0.3.30"
 regex = "1.10.6"
 colorize = "0"
+lazy_static = "1.5.0"
 
 [profile.release]
 opt-level = 'z'
