@@ -772,6 +772,7 @@ fn alter_offsets(config: &OffsetsConfig) -> Result<()> {
         }
     }
 
+    client.assign(&topic_partitions).map_err(MilenaError::from)?;
     client.store_offsets(&topic_partitions).map_err(MilenaError::from)?;
     client.commit(&topic_partitions, CommitMode::Sync).map_err(MilenaError::from)?;
 
