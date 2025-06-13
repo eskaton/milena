@@ -1,56 +1,56 @@
 use clap::{AppSettings, Arg, ArgGroup, Command};
 use clap_complete::Shell;
 
-pub const CMD_BROKERS: &'static str = "brokers";
-pub const CMD_TOPICS: &'static str = "topics";
-pub const CMD_GROUPS: &'static str = "groups";
-pub const CMD_CONFIG: &'static str = "config";
-pub const CMD_CONSUME: &'static str = "consume";
-pub const CMD_PRODUCE: &'static str = "produce";
-pub const CMD_OFFSETS: &'static str = "offsets";
+pub const CMD_BROKERS: &str = "brokers";
+pub const CMD_TOPICS: &str = "topics";
+pub const CMD_GROUPS: &str = "groups";
+pub const CMD_CONFIG: &str = "config";
+pub const CMD_CONSUME: &str = "consume";
+pub const CMD_PRODUCE: &str = "produce";
+pub const CMD_OFFSETS: &str = "offsets";
 
-pub const OP_LIST: &'static str = "list";
-pub const OP_DESCRIBE: &'static str = "describe";
-pub const OP_CREATE: &'static str = "create";
-pub const OP_DELETE: &'static str = "delete";
-pub const OP_ALTER: &'static str = "alter";
+pub const OP_LIST: &str = "list";
+pub const OP_DESCRIBE: &str = "describe";
+pub const OP_CREATE: &str = "create";
+pub const OP_DELETE: &str = "delete";
+pub const OP_ALTER: &str = "alter";
 
-pub const ARG_COMPLETIONS: &'static str = "completions";
-pub const ARG_BOOTSTRAP_SERVER: &'static str = "bootstrap-server";
-pub const ARG_EXTRA_PROPERTIES: &'static str = "extra-properties";
-pub const ARG_EXTRA_PROPERTIES_FILE: &'static str = "extra-properties-file";
-pub const ARG_WITH_OFFSETS: &'static str = "with-offsets";
-pub const ARG_TOPIC: &'static str = "topic";
-pub const ARG_OFFSETS: &'static str = "offsets";
-pub const ARG_EARLIEST: &'static str = "earliest";
-pub const ARG_LATEST: &'static str = "latest";
-pub const ARG_LAGS: &'static str = "lags";
-pub const ARG_PARTITIONS: &'static str = "partitions";
-pub const ARG_ALL_PARTITIONS: &'static str = "all-partitions";
-pub const ARG_PARTITION: &'static str = "partition";
-pub const ARG_REPLICATION: &'static str = "replication";
-pub const ARG_CONSUMER_GROUP: &'static str = "consumer-group";
-pub const ARG_FOLLOW: &'static str = "follow";
-pub const ARG_TAIL: &'static str = "tail";
-pub const ARG_COUNT: &'static str = "count";
-pub const ARG_PAYLOAD_FILE: &'static str = "payload-file";
-pub const ARG_KEY: &'static str = "key";
-pub const ARG_KEY_FILE: &'static str = "key-file";
-pub const ARG_HEADERS: &'static str = "headers";
-pub const ARG_NO_HEADERS: &'static str = "no-headers";
-pub const ARG_NO_TIMESTAMP: &'static str = "no-timestamp";
-pub const ARG_NO_KEY: &'static str = "no-key";
-pub const ARG_NO_PAYLOAD: &'static str = "no-payload";
-pub const ARG_KEY_REGEX: &'static str = "key-regex";
-pub const ARG_HEADER_REGEX: &'static str = "header-regex";
-pub const ARG_TIMESTAMP_BEFORE: &'static str = "timestamp-before";
-pub const ARG_TIMESTAMP_AFTER: &'static str = "timestamp-after";
-pub const ARG_GET: &'static str = "get";
-pub const ARG_SET: &'static str = "set";
-pub const ARG_JSON_BATCH: &'static str = "json-batch";
-pub const ARG_BATCH_SIZE: &'static str = "batch-size";
-pub const ARG_TIMEOUT: &'static str = "timeout";
-pub const ARG_INCLUDE_DEFAULTS: &'static str = "include-defaults";
+pub const ARG_COMPLETIONS: &str = "completions";
+pub const ARG_BOOTSTRAP_SERVER: &str = "bootstrap-server";
+pub const ARG_EXTRA_PROPERTIES: &str = "extra-properties";
+pub const ARG_EXTRA_PROPERTIES_FILE: &str = "extra-properties-file";
+pub const ARG_WITH_OFFSETS: &str = "with-offsets";
+pub const ARG_TOPIC: &str = "topic";
+pub const ARG_OFFSETS: &str = "offsets";
+pub const ARG_EARLIEST: &str = "earliest";
+pub const ARG_LATEST: &str = "latest";
+pub const ARG_LAGS: &str = "lags";
+pub const ARG_PARTITIONS: &str = "partitions";
+pub const ARG_ALL_PARTITIONS: &str = "all-partitions";
+pub const ARG_PARTITION: &str = "partition";
+pub const ARG_REPLICATION: &str = "replication";
+pub const ARG_CONSUMER_GROUP: &str = "consumer-group";
+pub const ARG_FOLLOW: &str = "follow";
+pub const ARG_TAIL: &str = "tail";
+pub const ARG_COUNT: &str = "count";
+pub const ARG_PAYLOAD_FILE: &str = "payload-file";
+pub const ARG_KEY: &str = "key";
+pub const ARG_KEY_FILE: &str = "key-file";
+pub const ARG_HEADERS: &str = "headers";
+pub const ARG_NO_HEADERS: &str = "no-headers";
+pub const ARG_NO_TIMESTAMP: &str = "no-timestamp";
+pub const ARG_NO_KEY: &str = "no-key";
+pub const ARG_NO_PAYLOAD: &str = "no-payload";
+pub const ARG_KEY_REGEX: &str = "key-regex";
+pub const ARG_HEADER_REGEX: &str = "header-regex";
+pub const ARG_TIMESTAMP_BEFORE: &str = "timestamp-before";
+pub const ARG_TIMESTAMP_AFTER: &str = "timestamp-after";
+pub const ARG_GET: &str = "get";
+pub const ARG_SET: &str = "set";
+pub const ARG_JSON_BATCH: &str = "json-batch";
+pub const ARG_BATCH_SIZE: &str = "batch-size";
+pub const ARG_TIMEOUT: &str = "timeout";
+pub const ARG_INCLUDE_DEFAULTS: &str = "include-defaults";
 
 fn add_global_args(app: Command) -> Command {
     let arg_servers: Arg = Arg::with_name(ARG_BOOTSTRAP_SERVER)
@@ -291,95 +291,126 @@ pub fn create_cmd() -> Command<'static> {
         .version(crate_version!())
         .propagate_version(false)
         .arg(arg_completions)
-        .subcommand(add_global_args(Command::new(CMD_BROKERS)
-            .about("Display information about the brokers")))
-        .subcommand(Command::new(CMD_TOPICS)
-            .about("Manage topics")
-            .setting(AppSettings::SubcommandRequiredElseHelp)
-            .subcommand(add_global_args(Command::new(OP_LIST)
-                .about("List topics")
-                .arg(&arg_topic)))
-            .subcommand(add_global_args(Command::new(OP_DESCRIBE)
-                .about("Describe topics")
+        .subcommand(add_global_args(
+            Command::new(CMD_BROKERS).about("Display information about the brokers"),
+        ))
+        .subcommand(
+            Command::new(CMD_TOPICS)
+                .about("Manage topics")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(add_global_args(
+                    Command::new(OP_LIST).about("List topics").arg(&arg_topic),
+                ))
+                .subcommand(add_global_args(
+                    Command::new(OP_DESCRIBE)
+                        .about("Describe topics")
+                        .arg(&arg_topic)
+                        .arg(&arg_with_offsets),
+                ))
+                .subcommand(add_global_args(
+                    Command::new(OP_CREATE)
+                        .about("Create a topic")
+                        .arg(arg_topic.clone().required(true))
+                        .arg(&arg_topic_partitions)
+                        .arg(&arg_replication),
+                ))
+                .subcommand(add_global_args(
+                    Command::new(OP_DELETE)
+                        .about("Delete a topic")
+                        .arg(arg_topic.clone().required(true)),
+                ))
+                .subcommand(add_global_args(
+                    Command::new(OP_ALTER)
+                        .about("Alter a topic")
+                        .arg(arg_topic.clone().required(true))
+                        .arg(arg_topic_partitions),
+                )),
+        )
+        .subcommand(
+            Command::new(CMD_GROUPS)
+                .about("Display and delete consumer groups")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(add_global_args(
+                    Command::new(OP_LIST).about("List groups").arg(&arg_group),
+                ))
+                .subcommand(add_global_args(
+                    Command::new(OP_DELETE)
+                        .about("Delete a group")
+                        .arg(&arg_group),
+                )),
+        )
+        .subcommand(
+            Command::new(CMD_OFFSETS)
+                .about("Display and alter offsets")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(add_global_args(
+                    Command::new(OP_LIST)
+                        .about("List offsets")
+                        .arg(&arg_topic)
+                        .arg(&arg_group)
+                        .arg(&arg_lags),
+                ))
+                .subcommand(add_global_args(
+                    Command::new(OP_ALTER)
+                        .about("Alter offsets")
+                        .arg(arg_topic.clone().required(true))
+                        .arg(arg_group.clone().required(true))
+                        .arg(&arg_partitions)
+                        .arg(&arg_offsets_offsets)
+                        .arg(&arg_earliest)
+                        .arg(&arg_latest)
+                        .group(
+                            ArgGroup::with_name("offset")
+                                .arg(ARG_OFFSETS)
+                                .arg(ARG_EARLIEST)
+                                .arg(ARG_LATEST)
+                                .required(true),
+                        ),
+                )),
+        )
+        .subcommand(add_global_args(
+            Command::new(CMD_CONFIG)
+                .about("Display and alter topic configuration")
                 .arg(&arg_topic)
-                .arg(&arg_with_offsets)))
-            .subcommand(add_global_args(Command::new(OP_CREATE)
-                .about("Create a topic")
-                .arg(&arg_topic.clone().required(true))
-                .arg(&arg_topic_partitions)
-                .arg(&arg_replication)))
-            .subcommand(add_global_args(Command::new(OP_DELETE)
-                .about("Delete a topic")
-                .arg(&arg_topic.clone().required(true))))
-            .subcommand(add_global_args(Command::new(OP_ALTER)
-                .about("Alter a topic")
-                .arg(&arg_topic.clone().required(true))
-                .arg(&arg_topic_partitions))))
-        .subcommand(Command::new(CMD_GROUPS)
-            .about("Display and delete consumer groups")
-            .setting(AppSettings::SubcommandRequiredElseHelp)
-            .subcommand(add_global_args(Command::new(OP_LIST)
-                .about("List groups")
-                .arg(&arg_group)))
-            .subcommand(add_global_args(Command::new(OP_DELETE)
-                .about("Delete a group")
-                .arg(&arg_group))))
-        .subcommand(Command::new(CMD_OFFSETS)
-            .about("Display and alter offsets")
-            .setting(AppSettings::SubcommandRequiredElseHelp)
-            .subcommand(add_global_args(Command::new(OP_LIST)
-                .about("List offsets")
-                .arg(&arg_topic)
+                .arg(&arg_set)
+                .arg(&arg_get)
+                .arg(&arg_include_defaults),
+        ))
+        .subcommand(add_global_args(
+            Command::new(CMD_CONSUME)
+                .about("Consume from a topic")
+                .arg(arg_topic.clone().required(true))
+                .arg(arg_partitions.clone().default_value("0"))
+                .arg(&arg_all_partition)
+                .arg(&arg_offsets)
                 .arg(&arg_group)
-                .arg(&arg_lags)))
-            .subcommand(add_global_args(Command::new(OP_ALTER)
-                .about("Alter offsets")
-                .arg(&arg_topic.clone().required(true))
-                .arg(&arg_group.clone().required(true))
-                .arg(&arg_partitions)
-                .arg(&arg_offsets_offsets)
-                .arg(&arg_earliest)
-                .arg(&arg_latest)
-                .group(ArgGroup::with_name("offset")
-                    .arg(ARG_OFFSETS)
-                    .arg(ARG_EARLIEST)
-                    .arg(ARG_LATEST)
-                    .required(true)))))
-        .subcommand(add_global_args(Command::new(CMD_CONFIG)
-            .about("Display and alter topic configuration")
-            .arg(&arg_topic)
-            .arg(&arg_set)
-            .arg(&arg_get)
-            .arg(&arg_include_defaults)))
-        .subcommand(add_global_args(Command::new(CMD_CONSUME)
-            .about("Consume from a topic")
-            .arg(&arg_topic.clone().required(true))
-            .arg(&arg_partitions.clone().default_value("0"))
-            .arg(&arg_all_partition)
-            .arg(&arg_offsets)
-            .arg(&arg_group)
-            .arg(&arg_follow)
-            .arg(&arg_tail)
-            .arg(&arg_count)
-            .arg(&arg_no_headers)
-            .arg(&arg_no_timestamp)
-            .arg(&arg_no_key)
-            .arg(&arg_no_payload)
-            .arg(&arg_timestamp_before)
-            .arg(&arg_timestamp_after)
-            .arg(&arg_key_regex)
-            .arg(&arg_header_regex)
-            .arg(&arg_json_batch_consumer)
-            .arg(&arg_latest)))
-        .subcommand(add_global_args(Command::new(CMD_PRODUCE)
-            .about("Produce to a topic")
-            .arg(&arg_topic.clone().required(true))
-            .arg(&arg_partition)
-            .arg(&arg_headers)
-            .arg(&arg_key)
-            .arg(&arg_key_file)
-            .arg(&arg_payload_file)
-            .arg(&arg_json_batch_producer))
-            .arg(&arg_batch_size))
+                .arg(&arg_follow)
+                .arg(&arg_tail)
+                .arg(&arg_count)
+                .arg(&arg_no_headers)
+                .arg(&arg_no_timestamp)
+                .arg(&arg_no_key)
+                .arg(&arg_no_payload)
+                .arg(&arg_timestamp_before)
+                .arg(&arg_timestamp_after)
+                .arg(&arg_key_regex)
+                .arg(&arg_header_regex)
+                .arg(&arg_json_batch_consumer)
+                .arg(&arg_latest),
+        ))
+        .subcommand(
+            add_global_args(
+                Command::new(CMD_PRODUCE)
+                    .about("Produce to a topic")
+                    .arg(arg_topic.clone().required(true))
+                    .arg(&arg_partition)
+                    .arg(&arg_headers)
+                    .arg(&arg_key)
+                    .arg(&arg_key_file)
+                    .arg(&arg_payload_file)
+                    .arg(&arg_json_batch_producer),
+            )
+            .arg(&arg_batch_size),
+        )
         .setting(AppSettings::ArgRequiredElseHelp)
 }
