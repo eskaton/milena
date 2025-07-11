@@ -1080,21 +1080,7 @@ fn get_topic_partitions(
         }
     } else if latest {
         if all_partitions {
-            let metadata = consumer
-                .fetch_metadata(Some(topic), config.base.timeout)
-                .map_err(MilenaError::from)?;
-            let topics = metadata
-                .topics()
-                .iter()
-                .filter(|t| t.name().eq(topic))
-                .collect::<Vec<&MetadataTopic>>();
-            let topics_meta = topics.first().unwrap();
-
-            partitions = topics_meta
-                .partitions()
-                .iter()
-                .map(|mdp| mdp.id())
-                .collect::<Vec<i32>>();
+            partitions = get_all_partitions(consumer, config, topic)?;
         }
 
         for partition in partitions {
@@ -1117,14 +1103,36 @@ fn get_topic_partitions(
             }
         }
     } else {
-        for partition in &config.partitions {
-            let (low, _high) = get_watermarks(consumer, topic, *partition)?;
+        if all_partitions {
+            partitions = get_all_partitions(consumer, config, topic)?;
+        }
 
-            topic_partition.add_partition_offset(topic, *partition, Offset(low))?;
+        for partition in partitions {
+            let (low, _high) = get_watermarks(consumer, topic, partition)?;
+
+            topic_partition.add_partition_offset(topic, partition, Offset(low))?;
         }
     }
 
     Ok(topic_partition)
+}
+
+fn get_all_partitions(consumer: &BaseConsumer, config: &ConsumeConfig, topic: &String) -> Result<Vec<i32>> {
+    let metadata = consumer
+        .fetch_metadata(Some(topic), config.base.timeout)
+        .map_err(MilenaError::from)?;
+    let topics = metadata
+        .topics()
+        .iter()
+        .filter(|t| t.name().eq(topic))
+        .collect::<Vec<&MetadataTopic>>();
+    let topics_meta = topics.first().unwrap();
+
+    Ok(topics_meta
+        .partitions()
+        .iter()
+        .map(|mdp| mdp.id())
+        .collect::<Vec<i32>>())
 }
 
 fn get_watermarks(consumer: &BaseConsumer, topic: &str, partition: i32) -> Result<(i64, i64)> {
