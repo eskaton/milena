@@ -4,17 +4,10 @@ use std::path::Path;
 use std::string::ToString;
 use std::time::Duration;
 
-use crate::args::{
-    ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT,
-    ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET,
-    ARG_HEADERS, ARG_HEADER_REGEX, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE,
-    ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD,
-    ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE,
-    ARG_REPLICATION, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE,
-    ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST,
-};
+use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_HEADER_REGEX, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_RESOLVE, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::error::MilenaError::GenericError;
 use crate::error::Result;
+use crate::resolve::add_override;
 use crate::utils::Swap;
 use crate::MilenaError::ArgError;
 use crate::DEFAULT_GROUP_ID;
@@ -236,6 +229,12 @@ impl BaseConfig {
             .swap()?
             .map(Duration::from_millis)
             .unwrap();
+
+        matches.values_of(ARG_RESOLVE).into_iter().for_each(|v| v.into_iter().for_each(|s| {
+            let mut parts = s.splitn(2, ':');
+
+            add_override(parts.next().unwrap(), parts.next().unwrap())
+        }));
 
         Ok(Self {
             servers,

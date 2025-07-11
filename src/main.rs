@@ -51,6 +51,7 @@ mod args;
 mod config;
 mod error;
 mod utils;
+mod resolve;
 
 const DEFAULT_GROUP_ID: &str = "milena";
 

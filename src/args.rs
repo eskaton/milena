@@ -17,6 +17,7 @@ pub const OP_ALTER: &str = "alter";
 
 pub const ARG_COMPLETIONS: &str = "completions";
 pub const ARG_BOOTSTRAP_SERVER: &str = "bootstrap-server";
+pub const ARG_RESOLVE: &str = "resolve";
 pub const ARG_EXTRA_PROPERTIES: &str = "extra-properties";
 pub const ARG_EXTRA_PROPERTIES_FILE: &str = "extra-properties-file";
 pub const ARG_WITH_OFFSETS: &str = "with-offsets";
@@ -54,12 +55,20 @@ pub const ARG_INCLUDE_DEFAULTS: &str = "include-defaults";
 
 fn add_global_args(app: Command) -> Command {
     let arg_servers: Arg = Arg::with_name(ARG_BOOTSTRAP_SERVER)
-        .help("The bootstrap servers")
+        .help("The bootstrap servers as a comma separated list")
         .short('b')
         .long(ARG_BOOTSTRAP_SERVER)
         .value_name("SERVERS")
         .use_delimiter(true)
         .required(true);
+
+    let arg_resolve: Arg = Arg::with_name(ARG_RESOLVE)
+        .help("Override hostname resolution by providing a comma separated list of hostnames with their overrides")
+        .short('r')
+        .long(ARG_RESOLVE)
+        .value_name("HOSTNAME:OVERRIDE")
+        .use_delimiter(true)
+        .required(false);
 
     let arg_extra_properties = Arg::with_name(ARG_EXTRA_PROPERTIES)
         .help("Additional properties to pass to librdkafka")
@@ -84,6 +93,7 @@ fn add_global_args(app: Command) -> Command {
         .default_value("3000");
 
     app.arg(&arg_servers)
+        .arg(&arg_resolve)
         .arg(&arg_extra_properties)
         .arg(&arg_extra_properties_file)
         .arg(&arg_timeout)
@@ -410,7 +420,7 @@ pub fn create_cmd() -> Command<'static> {
                     .arg(&arg_payload_file)
                     .arg(&arg_json_batch_producer),
             )
-            .arg(&arg_batch_size),
+                .arg(&arg_batch_size),
         )
         .setting(AppSettings::ArgRequiredElseHelp)
 }

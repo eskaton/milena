@@ -399,6 +399,7 @@ dependencies = [
  "dotproperties",
  "futures",
  "lazy_static",
+ "libc",
  "num-integer",
  "rdkafka",
  "regex",
