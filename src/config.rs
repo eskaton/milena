@@ -4,7 +4,7 @@ use std::path::Path;
 use std::string::ToString;
 use std::time::Duration;
 
-use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_HEADER_REGEX, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_REPLICATION, ARG_RESOLVE, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
+use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_HEADER_REGEX, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_PAYLOAD_REGEX, ARG_REPLICATION, ARG_RESOLVE, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST};
 use crate::error::MilenaError::GenericError;
 use crate::error::Result;
 use crate::resolve::add_override;
@@ -477,6 +477,7 @@ pub struct ConsumeConfig {
     pub count: Option<usize>,
     pub json_batch: bool,
     pub key_regex: Option<Regex>,
+    pub payload_regex: Option<Regex>,
     pub header_regexes: Option<Vec<(Regex, Regex)>>,
     pub timestamp_before: Option<i64>,
     pub timestamp_after: Option<i64>,
@@ -523,6 +524,9 @@ impl ConsumeConfig {
         let json_batch = matches.is_present(ARG_JSON_BATCH);
         let key_regex = matches
             .value_of(ARG_KEY_REGEX)
+            .map(|s| Regex::new(s).unwrap());
+        let payload_regex = matches
+            .value_of(ARG_PAYLOAD_REGEX)
             .map(|s| Regex::new(s).unwrap());
         let header_regexes = matches
             .values_of(ARG_HEADER_REGEX)
@@ -597,6 +601,7 @@ impl ConsumeConfig {
             count,
             json_batch,
             key_regex,
+            payload_regex,
             header_regexes,
             timestamp_before,
             timestamp_after,

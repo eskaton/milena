@@ -44,6 +44,7 @@ pub const ARG_NO_KEY: &str = "no-key";
 pub const ARG_NO_PAYLOAD: &str = "no-payload";
 pub const ARG_KEY_REGEX: &str = "key-regex";
 pub const ARG_HEADER_REGEX: &str = "header-regex";
+pub const ARG_PAYLOAD_REGEX: &str = "payload-regex";
 pub const ARG_TIMESTAMP_BEFORE: &str = "timestamp-before";
 pub const ARG_TIMESTAMP_AFTER: &str = "timestamp-after";
 pub const ARG_GET: &str = "get";
@@ -237,6 +238,12 @@ pub fn create_cmd() -> Command<'static> {
         .long(ARG_HEADER_REGEX)
         .value_name("REGEX");
 
+    let arg_payload_regex = Arg::with_name(ARG_PAYLOAD_REGEX)
+        .help("Regular expression to filter messages by payload")
+        .value_delimiter(',')
+        .long(ARG_PAYLOAD_REGEX)
+        .value_name("REGEX");
+
     let arg_get = Arg::with_name(ARG_GET)
         .help("Get configuration values")
         .long(ARG_GET)
@@ -404,6 +411,7 @@ pub fn create_cmd() -> Command<'static> {
                 .arg(&arg_timestamp_before)
                 .arg(&arg_timestamp_after)
                 .arg(&arg_key_regex)
+                .arg(&arg_payload_regex)
                 .arg(&arg_header_regex)
                 .arg(&arg_json_batch_consumer)
                 .arg(&arg_latest),

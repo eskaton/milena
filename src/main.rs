@@ -1250,6 +1250,19 @@ fn handle_fetch_result<'a>(
         false => message.payload().map(|p| String::from_utf8_lossy(p)),
     };
 
+    if config.payload_regex.is_some() {
+        if payload.is_none() {
+            return Ok(None);
+        } else if !config
+            .payload_regex
+            .as_ref()
+            .unwrap()
+            .is_match(payload.as_ref().unwrap().as_ref())
+        {
+            return Ok(None);
+        }
+    }
+
     Ok(Some(ConsumedMessage::new(timestamp, key, payload, headers)))
 }
 
