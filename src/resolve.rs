@@ -3,6 +3,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_void;
 use std::ptr;
 use std::sync::{OnceLock, RwLock};
+use libc::{in_addr_t, in_port_t, sockaddr_in};
 
 extern "C" {
     fn dlsym(handle: *mut libc::c_void, symbol: *const libc::c_char) -> *mut libc::c_void;
@@ -101,14 +102,7 @@ pub extern "C" fn getaddrinfo(
 
             let sockaddr = (*result).ai_addr as *mut libc::sockaddr_in;
 
-            ptr::write(sockaddr, libc::sockaddr_in {
-                sin_family: libc::AF_INET as u16,
-                sin_port: port.unwrap(),
-                sin_addr: libc::in_addr {
-                    s_addr: ip.unwrap(),
-                },
-                sin_zero: [0; 8],
-            });
+            write_sockaddr(sockaddr, ip, port);
 
             *res = result;
 
@@ -117,4 +111,29 @@ pub extern "C" fn getaddrinfo(
 
         original_getaddrinfo(node, service, hints, res)
     }
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn write_sockaddr(sockaddr: *mut sockaddr_in, ip: Option<in_addr_t>, port: Option<in_port_t>) {
+    ptr::write(sockaddr, libc::sockaddr_in {
+        sin_family: libc::AF_INET as u16,
+        sin_port: port.unwrap(),
+        sin_addr: libc::in_addr {
+            s_addr: ip.unwrap(),
+        },
+        sin_zero: [0; 8],
+    });
+}
+
+#[cfg(target_os = "freebsd")]
+unsafe fn write_sockaddr(sockaddr: *mut sockaddr_in, ip: Option<in_addr_t>, port: Option<in_port_t>) {
+    ptr::write(sockaddr, libc::sockaddr_in {
+        sin_len: 0,
+        sin_family: libc::AF_INET as u8,
+        sin_port: port.unwrap(),
+        sin_addr: libc::in_addr {
+            s_addr: ip.unwrap(),
+        },
+        sin_zero: [0; 8],
+    });
 }
