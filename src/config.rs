@@ -1,9 +1,3 @@
-use std::collections::HashMap;
-use std::panic;
-use std::path::Path;
-use std::string::ToString;
-use std::time::Duration;
-
 use crate::args::{
     ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT,
     ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET,
@@ -11,8 +5,8 @@ use crate::args::{
     ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD,
     ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_OUTPUT_FILE, ARG_PARTITION, ARG_PARTITIONS,
     ARG_PAYLOAD_FILE, ARG_PAYLOAD_REGEX, ARG_REPLICATION, ARG_RESOLVE, ARG_SET, ARG_TAIL,
-    ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_OFFSETS, OP_ALTER,
-    OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST,
+    ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_ASSIGNMENTS, ARG_WITH_OFFSETS,
+    OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST,
 };
 use crate::error::MilenaError::GenericError;
 use crate::error::Result;
@@ -24,6 +18,11 @@ use chrono::DateTime;
 use clap::ArgMatches;
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::collections::HashMap;
+use std::panic;
+use std::path::Path;
+use std::string::ToString;
+use std::time::Duration;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum ConfigType {
@@ -287,6 +286,7 @@ pub struct GroupConfig {
     pub base: BaseConfig,
     pub mode: GroupMode,
     pub consumer_group: Option<String>,
+    pub with_assignments: bool,
 }
 
 impl GroupConfig {
@@ -299,11 +299,13 @@ impl GroupConfig {
 
         let base = BaseConfig::new(matches)?;
         let consumer_group = matches.value_of(ARG_CONSUMER_GROUP).map(|s| s.to_string());
+        let with_assignments = matches.try_contains_id(ARG_WITH_ASSIGNMENTS).unwrap_or(false);
 
         Ok(Self {
             base,
             mode,
             consumer_group,
+            with_assignments,
         })
     }
 }

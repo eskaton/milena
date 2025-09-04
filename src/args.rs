@@ -54,6 +54,7 @@ pub const ARG_JSON_BATCH: &str = "json-batch";
 pub const ARG_BATCH_SIZE: &str = "batch-size";
 pub const ARG_TIMEOUT: &str = "timeout";
 pub const ARG_INCLUDE_DEFAULTS: &str = "include-defaults";
+pub const ARG_WITH_ASSIGNMENTS: &str = "with-assignments";
 
 fn add_global_args(app: Command) -> Command {
     let arg_servers: Arg = Arg::with_name(ARG_BOOTSTRAP_SERVER)
@@ -311,6 +312,10 @@ pub fn create_cmd() -> Command<'static> {
         .short('l')
         .long(ARG_LAGS);
 
+    let arg_with_assignments = Arg::with_name(ARG_WITH_ASSIGNMENTS)
+        .help("Include assignments of topic partitions")
+        .long(ARG_WITH_ASSIGNMENTS);
+
     Command::new("milena")
         .version(crate_version!())
         .propagate_version(false)
@@ -355,7 +360,10 @@ pub fn create_cmd() -> Command<'static> {
                 .about("Display and delete consumer groups")
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(add_global_args(
-                    Command::new(OP_LIST).about("List groups").arg(&arg_group),
+                    Command::new(OP_LIST)
+                        .about("List groups")
+                        .arg(&arg_group)
+                        .arg(&arg_with_assignments),
                 ))
                 .subcommand(add_global_args(
                     Command::new(OP_DELETE)

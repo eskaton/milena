@@ -1,5 +1,6 @@
 #[macro_use(crate_version, value_parser)]
 extern crate clap;
+extern crate core;
 
 use crate::args::create_cmd;
 use crate::args::{
@@ -12,6 +13,18 @@ use crate::config::{
 };
 use crate::error::{MilenaError, Result};
 use crate::MilenaError::{ArgError, GenericError, KafkaError};
+use std::borrow::Cow;
+use std::cmp::{max, PartialEq};
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
+use std::{env, io};
+
+use std::fs::{read, read_to_string, File};
+use std::io::{BufWriter, Cursor, Read};
+use std::path::Path;
+
+use byteorder::{BigEndian, ReadBytesExt};
+
 use chrono::{DateTime, Utc};
 use clap::{ArgMatches, Command};
 use clap_complete::{generate, Shell};
@@ -38,14 +51,7 @@ use rdkafka::util::Timeout;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::borrow::Cow;
-use std::cmp::{max, PartialEq};
-use std::collections::{HashMap, HashSet};
-use std::fs::{read, read_to_string, File};
-use std::path::Path;
-use std::time::Duration;
-use std::{env, io};
-use std::io::BufWriter;
+
 
 mod args;
 mod config;
@@ -128,11 +134,25 @@ impl Group {
 struct Member {
     id: String,
     client_host: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    assignments: Vec<MemberAssignment>,
 }
 
 impl Member {
-    fn new(id: String, client_host: String) -> Self {
-        Self { id, client_host }
+    fn new(id: String, client_host: String, assignments: Vec<MemberAssignment>) -> Self {
+        Self { id, client_host, assignments }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct MemberAssignment {
+    topic: String,
+    partitions: Vec<i32>,
+}
+
+impl MemberAssignment {
+    fn new(topic: String, partitions: Vec<i32>) -> Self {
+        Self { topic, partitions }
     }
 }
 
@@ -388,7 +408,7 @@ fn create_client(config: &BaseConfig) -> Result<Client> {
         kafka_type,
         DefaultClientContext,
     )
-    .map_err(MilenaError::from)?;
+        .map_err(MilenaError::from)?;
 
     Ok(client)
 }
@@ -723,35 +743,72 @@ fn delete_group(config: &GroupConfig) -> Result<()> {
     }
 }
 
+fn parse_assignment(data: &[u8]) -> Result<Vec<MemberAssignment>> {
+    let mut cursor = Cursor::new(data);
+    let _version = cursor.read_i16::<BigEndian>()?;
+    let topic_count = cursor.read_i32::<BigEndian>()? as usize;
+
+    let mut assignments = Vec::with_capacity(topic_count);
+
+    for _ in 0..topic_count {
+        let topic_length = cursor.read_u16::<BigEndian>()? as usize;
+
+        let mut topic_name_bytes = vec![0; topic_length];
+
+        cursor.read_exact(&mut topic_name_bytes)?;
+
+        let topic_name = String::from_utf8(topic_name_bytes)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid UTF-8 in topic name"))?;
+
+
+        let partition_count = cursor.read_i32::<BigEndian>()? as usize;
+        let mut partitions = Vec::with_capacity(partition_count);
+
+        for _ in 0..partition_count {
+            let partition_id = cursor.read_i32::<BigEndian>()?;
+            partitions.push(partition_id);
+        }
+
+        assignments.push(MemberAssignment::new(topic_name, partitions));
+    }
+
+    Ok(assignments)
+}
+
 fn show_groups(config: &GroupConfig) -> Result<()> {
     let client: BaseConsumer = create_consumer(&config.base, None)?;
-
-    client
-        .fetch_metadata(None, config.base.timeout)
-        .map_err(MilenaError::from)?;
-
     let group_list = client
         .fetch_group_list(config.consumer_group.as_deref(), config.base.timeout)
         .map_err(MilenaError::from)?;
     let mut rec_groups = Vec::<Group>::new();
 
-    group_list.groups().iter().for_each(|group| {
+    group_list.groups().iter().try_for_each(|group| {
+        let protocol_type = group.protocol_type();
         let mut rec_group = Group::new(
             group.name().to_string(),
-            group.protocol_type().to_string(),
+            protocol_type.to_string(),
             group.protocol().to_string(),
             group.state().to_string(),
         );
 
-        group.members().iter().for_each(|member| {
+        group.members().iter().try_for_each(|member| {
             rec_group.add_member(Member::new(
                 member.id().to_string(),
                 member.client_host().to_string(),
-            ))
-        });
+                if config.with_assignments && "consumer".eq(protocol_type) {
+                    member.assignment().map(parse_assignment).unwrap_or_else(|| Ok(Vec::new()))?
+                } else {
+                    Vec::new()
+                },
+            ));
 
-        rec_groups.push(rec_group)
-    });
+            Ok::<(), MilenaError>(())
+        })?;
+
+        rec_groups.push(rec_group);
+
+        Ok::<(), MilenaError>(())
+    })?;
 
     println!("{}", json!(rec_groups));
 
@@ -1187,11 +1244,11 @@ fn handle_fetch_result<'a>(
             return Ok(None);
         } else if config_timestamp
             <= timestamp
-                .as_ref()
-                .unwrap()
-                .time
-                .timestamp_nanos_opt()
-                .unwrap()
+            .as_ref()
+            .unwrap()
+            .time
+            .timestamp_nanos_opt()
+            .unwrap()
         {
             return Ok(None);
         }
@@ -1202,11 +1259,11 @@ fn handle_fetch_result<'a>(
             return Ok(None);
         } else if config.timestamp_after.unwrap()
             >= timestamp
-                .as_ref()
-                .unwrap()
-                .time
-                .timestamp_nanos_opt()
-                .unwrap()
+            .as_ref()
+            .unwrap()
+            .time
+            .timestamp_nanos_opt()
+            .unwrap()
         {
             return Ok(None);
         }
@@ -1375,7 +1432,7 @@ fn send_message(
         &config.topic,
         delivery_opaque,
     )
-    .headers(headers.clone());
+        .headers(headers.clone());
 
     if config.partition.is_some() {
         record = record.partition(config.partition.unwrap());

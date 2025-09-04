@@ -1,6 +1,6 @@
-use std::io::Error;
 use crate::GenericError;
 use crate::MilenaError::{ArgError, KafkaError};
+use std::io::Error;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum MilenaError {
