@@ -1,13 +1,17 @@
 #[macro_use(crate_version, value_parser)]
 extern crate clap;
 
-use std::borrow::Cow;
-use std::cmp::{max, PartialEq};
-use std::collections::{HashMap, HashSet};
-use std::fs::{read, read_to_string};
-use std::time::Duration;
-use std::{env, io};
-
+use crate::args::create_cmd;
+use crate::args::{
+    ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE,
+    CMD_TOPICS,
+};
+use crate::config::{
+    BaseConfig, ConfigConfig, ConfigMode, ConfigType, ConsumeConfig, GroupConfig, GroupMode,
+    OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode, CONFIG_PROPERTIES,
+};
+use crate::error::{MilenaError, Result};
+use crate::MilenaError::{ArgError, GenericError, KafkaError};
 use chrono::{DateTime, Utc};
 use clap::{ArgMatches, Command};
 use clap_complete::{generate, Shell};
@@ -34,24 +38,20 @@ use rdkafka::util::Timeout;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-
-use crate::args::create_cmd;
-use crate::args::{
-    ARG_COMPLETIONS, CMD_BROKERS, CMD_CONFIG, CMD_CONSUME, CMD_GROUPS, CMD_OFFSETS, CMD_PRODUCE,
-    CMD_TOPICS,
-};
-use crate::config::{
-    BaseConfig, ConfigConfig, ConfigMode, ConfigType, ConsumeConfig, GroupConfig, GroupMode,
-    OffsetMode, OffsetsConfig, ProduceConfig, TopicConfig, TopicMode, CONFIG_PROPERTIES,
-};
-use crate::error::{MilenaError, Result};
-use crate::MilenaError::{ArgError, GenericError, KafkaError};
+use std::borrow::Cow;
+use std::cmp::{max, PartialEq};
+use std::collections::{HashMap, HashSet};
+use std::fs::{read, read_to_string, File};
+use std::path::Path;
+use std::time::Duration;
+use std::{env, io};
+use std::io::BufWriter;
 
 mod args;
 mod config;
 mod error;
-mod utils;
 mod resolve;
+mod utils;
 
 const DEFAULT_GROUP_ID: &str = "milena";
 
@@ -994,6 +994,20 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
     let mut current_count = 0;
     let topic_partition = get_topic_partitions(&consumer, &config)?;
     let mut messages = Vec::<ConsumedMessage>::new();
+    let mut output_file: Box<dyn std::io::Write> = if let Some(ref output_file) = config.output_file {
+        let path = Path::new(output_file);
+
+        if path.exists() {
+            return Err(GenericError(format!(
+                "Output file '{}' already exists",
+                output_file
+            )));
+        }
+
+        Box::new(BufWriter::new(File::create(output_file)?))
+    } else {
+        Box::new(BufWriter::new(io::stdout().lock()))
+    };
 
     if let Err(e) = consumer.assign(&topic_partition) {
         return Err(MilenaError::from(e));
@@ -1034,7 +1048,7 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
                         message.headers,
                     ));
                 } else {
-                    println!("{}", json!(message));
+                    writeln!(output_file, "{}", json!(message))?;
                 }
             }
             None => break,
@@ -1044,7 +1058,7 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
     }
 
     if json_batch {
-        println!("{}", json!(messages));
+        writeln!(output_file, "{}", json!(messages))?;
     }
 
     Ok(())
@@ -1118,7 +1132,11 @@ fn get_topic_partitions(
     Ok(topic_partition)
 }
 
-fn get_all_partitions(consumer: &BaseConsumer, config: &ConsumeConfig, topic: &String) -> Result<Vec<i32>> {
+fn get_all_partitions(
+    consumer: &BaseConsumer,
+    config: &ConsumeConfig,
+    topic: &String,
+) -> Result<Vec<i32>> {
     let metadata = consumer
         .fetch_metadata(Some(topic), config.base.timeout)
         .map_err(MilenaError::from)?;

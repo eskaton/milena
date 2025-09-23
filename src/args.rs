@@ -35,6 +35,7 @@ pub const ARG_FOLLOW: &str = "follow";
 pub const ARG_TAIL: &str = "tail";
 pub const ARG_COUNT: &str = "count";
 pub const ARG_PAYLOAD_FILE: &str = "payload-file";
+pub const ARG_OUTPUT_FILE: &str = "output-file";
 pub const ARG_KEY: &str = "key";
 pub const ARG_KEY_FILE: &str = "key-file";
 pub const ARG_HEADERS: &str = "headers";
@@ -182,6 +183,12 @@ pub fn create_cmd() -> Command<'static> {
         .help("A file containing the payload")
         .long(ARG_PAYLOAD_FILE)
         .value_name("PAYLOAD_FILE");
+
+    let arg_output_file = Arg::with_name(ARG_OUTPUT_FILE)
+        .help("An output file")
+        .long(ARG_OUTPUT_FILE)
+        .short('F')
+        .value_name("OUTPUT_FILE");
 
     let arg_key = Arg::with_name(ARG_KEY)
         .help("A key")
@@ -414,7 +421,8 @@ pub fn create_cmd() -> Command<'static> {
                 .arg(&arg_payload_regex)
                 .arg(&arg_header_regex)
                 .arg(&arg_json_batch_consumer)
-                .arg(&arg_latest),
+                .arg(&arg_latest)
+                .arg(&arg_output_file),
         ))
         .subcommand(
             add_global_args(

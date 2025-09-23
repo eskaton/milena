@@ -1,3 +1,4 @@
+use std::io::Error;
 use crate::GenericError;
 use crate::MilenaError::{ArgError, KafkaError};
 
@@ -53,6 +54,12 @@ impl From<&rdkafka::error::KafkaError> for MilenaError {
 impl From<&rdkafka::error::RDKafkaErrorCode> for MilenaError {
     fn from(error: &rdkafka::error::RDKafkaErrorCode) -> Self {
         KafkaError(format!("{}", error))
+    }
+}
+
+impl From<Error> for MilenaError {
+    fn from(error: Error) -> Self {
+        GenericError(format!("{}", error))
     }
 }
 
