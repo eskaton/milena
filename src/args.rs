@@ -127,7 +127,7 @@ pub fn create_cmd() -> Command<'static> {
     let arg_replication = Arg::with_name(ARG_REPLICATION)
         .help("Replication factor")
         .long(ARG_REPLICATION)
-        .short('r')
+        .short('R')
         .value_name("REPLICATION");
 
     let arg_partitions = Arg::with_name(ARG_PARTITIONS)
