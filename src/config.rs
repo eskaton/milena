@@ -1,13 +1,4 @@
-use crate::args::{
-    ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT,
-    ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET,
-    ARG_HEADERS, ARG_HEADER_REGEX, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE,
-    ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD,
-    ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_OUTPUT_FILE, ARG_PARTITION, ARG_PARTITIONS,
-    ARG_PAYLOAD_FILE, ARG_PAYLOAD_REGEX, ARG_REPLICATION, ARG_RESOLVE, ARG_SET, ARG_TAIL,
-    ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_ASSIGNMENTS, ARG_WITH_OFFSETS,
-    OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST,
-};
+use crate::args::{ARG_ALL_PARTITIONS, ARG_BATCH_SIZE, ARG_BOOTSTRAP_SERVER, ARG_CONSUMER_GROUP, ARG_COUNT, ARG_EARLIEST, ARG_EXTRA_PROPERTIES, ARG_EXTRA_PROPERTIES_FILE, ARG_FOLLOW, ARG_GET, ARG_HEADERS, ARG_HEADER_REGEX, ARG_INCLUDE_DEFAULTS, ARG_JSON_BATCH, ARG_KEY, ARG_KEY_FILE, ARG_KEY_REGEX, ARG_LAGS, ARG_LATEST, ARG_NO_HEADERS, ARG_NO_KEY, ARG_NO_PAYLOAD, ARG_NO_TIMESTAMP, ARG_OFFSETS, ARG_OUTPUT_FILE, ARG_PARTITION, ARG_PARTITIONS, ARG_PAYLOAD_FILE, ARG_PAYLOAD_REGEX, ARG_REPLICATION, ARG_RESOLVE, ARG_SET, ARG_TAIL, ARG_TIMEOUT, ARG_TIMESTAMP_AFTER, ARG_TIMESTAMP_BEFORE, ARG_TOPIC, ARG_WITH_ASSIGNMENTS, ARG_WITH_OFFSETS, OP_ALTER, OP_CREATE, OP_DELETE, OP_DESCRIBE, OP_LIST, OP_CLEAR, ARG_OFFSET, ARG_ALL};
 use crate::error::MilenaError::GenericError;
 use crate::error::Result;
 use crate::resolve::add_override;
@@ -427,6 +418,7 @@ pub enum TopicMode {
     Create,
     Delete,
     Alter,
+    Clear,
 }
 
 pub struct TopicConfig {
@@ -436,6 +428,9 @@ pub struct TopicConfig {
     pub with_offsets: bool,
     pub partitions: Option<i32>,
     pub replication: Option<i32>,
+    pub partition: Option<i32>,
+    pub offset: Option<i64>,
+    pub all: bool
 }
 
 impl TopicConfig {
@@ -446,6 +441,7 @@ impl TopicConfig {
             Some((OP_ALTER, matches)) => (matches, TopicMode::Alter),
             Some((OP_CREATE, matches)) => (matches, TopicMode::Create),
             Some((OP_DELETE, matches)) => (matches, TopicMode::Delete),
+            Some((OP_CLEAR, matches)) => (matches, TopicMode::Clear),
             _ => panic!("Invalid subcommand"),
         };
 
@@ -462,6 +458,17 @@ impl TopicConfig {
             .unwrap_or(None)
             .map(|s: &String| parse_replication(s))
             .swap()?;
+        let partition = matches
+            .try_get_one(ARG_PARTITION)
+            .unwrap_or(None)
+            .map(|s: &String| parse_partition(s))
+            .swap()?;
+        let offset = matches
+            .try_get_one(ARG_OFFSET)
+            .unwrap_or(None)
+            .map(|s: &String| parse_offset(s))
+            .swap()?;
+        let all = matches.try_contains_id(ARG_ALL).unwrap_or(false);
 
         Ok(Self {
             base,
@@ -470,6 +477,9 @@ impl TopicConfig {
             with_offsets,
             partitions,
             replication,
+            partition,
+            offset,
+            all
         })
     }
 }

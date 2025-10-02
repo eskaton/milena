@@ -34,7 +34,7 @@ use rdkafka::message::{
 };
 use rdkafka::metadata::MetadataTopic;
 use rdkafka::producer::{BaseProducer, BaseRecord, Producer, ProducerContext};
-use rdkafka::topic_partition_list::Offset::Offset;
+use rdkafka::topic_partition_list::Offset::{End, Offset};
 use rdkafka::types::RDKafkaType;
 use rdkafka::util::Timeout;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
@@ -591,10 +591,46 @@ fn cmd_topics(matches: &ArgMatches) -> Result<()> {
         TopicMode::Alter => alter_topic(&config),
         TopicMode::Create => create_topic(&config),
         TopicMode::Delete => delete_topic(&config),
+        TopicMode::Clear => clear_topic(&config),
         _ => show_topics(&config),
     }?;
 
     Ok(())
+}
+
+fn clear_topic(config: &TopicConfig) -> Result<()> {
+    let client = create_admin_client(&config.base)?;
+    let consumer = create_consumer(&config.base, None)?;
+    let topic = config.topic.as_ref().unwrap();
+    let partition = config.partition.as_ref();
+    let offset = config.offset.as_ref();
+    let all = config.all;
+    let options = AdminOptions::new();
+
+    let mut partitions = Vec::new();
+
+    if partition.is_some() {
+        partitions.push(*partition.unwrap());
+    } else {
+        get_all_partitions(&consumer, config.base.timeout, &topic)?.iter().for_each(|p| partitions.push(*p));
+    }
+
+    let mut partition_list = TopicPartitionList::new();
+
+    partitions.iter().try_for_each(|partition| {
+        if all {
+            partition_list.add_partition_offset(topic, *partition, End)
+        } else {
+            partition_list.add_partition_offset(topic, *partition, Offset(*offset.unwrap()))
+        }
+    })?;
+
+    let result = executor::block_on(client.delete_records(&partition_list, &options));
+
+    match result {
+        Ok(_) => Ok(println!("Successfully cleared topic '{}'", topic)),
+        Err(err) => Err(MilenaError::from(err))
+    }
 }
 
 fn create_topic(config: &TopicConfig) -> Result<()> {
@@ -1190,7 +1226,7 @@ fn get_topic_partitions(
         }
     } else if latest {
         if all_partitions {
-            partitions = get_all_partitions(consumer, config, topic)?;
+            partitions = get_all_partitions(consumer, config.base.timeout, topic)?;
         }
 
         for partition in partitions {
@@ -1214,7 +1250,7 @@ fn get_topic_partitions(
         }
     } else {
         if all_partitions {
-            partitions = get_all_partitions(consumer, config, topic)?;
+            partitions = get_all_partitions(consumer, config.base.timeout, topic)?;
         }
 
         for partition in partitions {
@@ -1227,9 +1263,9 @@ fn get_topic_partitions(
     Ok(topic_partition)
 }
 
-fn get_all_partitions(consumer: &BaseConsumer, config: &ConsumeConfig, topic: &String) -> Result<Vec<i32>> {
+fn get_all_partitions(consumer: &BaseConsumer, timeout: Duration, topic: &String) -> Result<Vec<i32>> {
     let metadata = consumer
-        .fetch_metadata(Some(topic), config.base.timeout)
+        .fetch_metadata(Some(topic), timeout)
         .map_err(MilenaError::from)?;
     let topics = metadata
         .topics()

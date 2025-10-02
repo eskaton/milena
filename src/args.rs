@@ -14,6 +14,7 @@ pub const OP_DESCRIBE: &str = "describe";
 pub const OP_CREATE: &str = "create";
 pub const OP_DELETE: &str = "delete";
 pub const OP_ALTER: &str = "alter";
+pub const OP_CLEAR: &str = "clear";
 
 pub const ARG_COMPLETIONS: &str = "completions";
 pub const ARG_BOOTSTRAP_SERVER: &str = "bootstrap-server";
@@ -22,6 +23,8 @@ pub const ARG_EXTRA_PROPERTIES: &str = "extra-properties";
 pub const ARG_EXTRA_PROPERTIES_FILE: &str = "extra-properties-file";
 pub const ARG_WITH_OFFSETS: &str = "with-offsets";
 pub const ARG_TOPIC: &str = "topic";
+pub const ARG_OFFSET: &str = "offset";
+pub const ARG_ALL: &str = "all";
 pub const ARG_OFFSETS: &str = "offsets";
 pub const ARG_EARLIEST: &str = "earliest";
 pub const ARG_LATEST: &str = "latest";
@@ -149,6 +152,19 @@ pub fn create_cmd() -> Command<'static> {
         .help("Consume from all partitions")
         .long(ARG_ALL_PARTITIONS)
         .conflicts_with_all(&[ARG_PARTITIONS, ARG_TAIL]);
+
+    let arg_offset = Arg::with_name(ARG_OFFSET)
+        .help("Clear messages up to this offset")
+        .short('o')
+        .long(ARG_OFFSET)
+        .requires(ARG_PARTITION)
+        .value_name("OFFSET");
+
+    let arg_all = Arg::with_name(ARG_ALL)
+        .help("Clear all messages")
+        .short('a')
+        .long(ARG_ALL)
+        .conflicts_with(&ARG_OFFSET);
 
     let arg_offsets = Arg::with_name(ARG_OFFSETS)
         .help("A comma separated list of offsets")
@@ -353,6 +369,20 @@ pub fn create_cmd() -> Command<'static> {
                         .about("Alter a topic")
                         .arg(arg_topic.clone().required(true))
                         .arg(arg_topic_partitions),
+                ))
+                .subcommand(add_global_args(
+                    Command::new(OP_CLEAR)
+                        .about("Clear a topic or a partition")
+                        .arg(arg_topic.clone().required(true))
+                        .arg(&arg_partition)
+                        .arg(&arg_offset)
+                        .arg(&arg_all)
+                        .group(
+                            ArgGroup::with_name("offset-all-group")
+                                .arg(ARG_OFFSET)
+                                .arg(ARG_ALL)
+                                .required(true),
+                        ),
                 )),
         )
         .subcommand(
