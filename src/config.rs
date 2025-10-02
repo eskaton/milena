@@ -486,6 +486,7 @@ pub struct ConsumeConfig {
     pub no_timestamp: bool,
     pub no_key: bool,
     pub no_payload: bool,
+    pub with_offsets: bool,
     pub tail: Option<i64>,
     pub count: Option<usize>,
     pub json_batch: bool,
@@ -527,6 +528,7 @@ impl ConsumeConfig {
         let no_timestamp = matches.is_present(ARG_NO_TIMESTAMP);
         let no_key = matches.is_present(ARG_NO_KEY);
         let no_payload = matches.is_present(ARG_NO_PAYLOAD);
+        let with_offsets = matches.is_present(ARG_WITH_OFFSETS);
         let tail = matches
             .value_of(ARG_TAIL)
             .map(|s| parse_number(&s.to_string()))
@@ -612,6 +614,7 @@ impl ConsumeConfig {
             no_timestamp,
             no_key,
             no_payload,
+            with_offsets,
             tail,
             count,
             json_batch,

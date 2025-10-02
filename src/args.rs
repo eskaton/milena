@@ -423,6 +423,7 @@ pub fn create_cmd() -> Command<'static> {
                 .arg(&arg_no_timestamp)
                 .arg(&arg_no_key)
                 .arg(&arg_no_payload)
+                .arg(&arg_with_offsets)
                 .arg(&arg_timestamp_before)
                 .arg(&arg_timestamp_after)
                 .arg(&arg_key_regex)

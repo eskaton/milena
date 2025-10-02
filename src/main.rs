@@ -310,6 +310,10 @@ struct ConsumedMessage<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     timestamp: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    partition: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    offset: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     key: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     payload: Option<Cow<'a, str>>,
@@ -327,6 +331,26 @@ impl<'a> ConsumedMessage<'a> {
         Self {
             key,
             timestamp,
+            partition: None,
+            offset: None,
+            payload,
+            headers,
+        }
+    }
+
+    fn new_with_offset(
+        timestamp: Option<Timestamp>,
+        partition: i32,
+        offset: i64,
+        key: Option<Cow<'a, str>>,
+        payload: Option<Cow<'a, str>>,
+        headers: Option<Vec<Header>>,
+    ) -> ConsumedMessage<'a> {
+        Self {
+            key,
+            timestamp,
+            partition: Some(partition),
+            offset: Some(offset),
             payload,
             headers,
         }
@@ -1346,7 +1370,11 @@ fn handle_fetch_result<'a>(
         }
     }
 
-    Ok(Some(ConsumedMessage::new(timestamp, key, payload, headers)))
+    if config.with_offsets {
+        Ok(Some(ConsumedMessage::new_with_offset(timestamp, message.partition(), message.offset(), key, payload, headers)))
+    } else {
+        Ok(Some(ConsumedMessage::new(timestamp, key, payload, headers)))
+    }
 }
 
 fn get_headers(borrowed_headers: &BorrowedHeaders) -> Vec<Header> {
