@@ -2,7 +2,7 @@ use crate::GenericError;
 use crate::MilenaError::{ArgError, KafkaError};
 use std::io::Error;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum MilenaError {
     ArgError(String),
     KafkaError(String),
@@ -63,5 +63,10 @@ impl From<Error> for MilenaError {
     }
 }
 
+impl From<serde_json::Error> for MilenaError {
+    fn from(error: serde_json::Error) -> Self {
+        GenericError(format!("{}", error))
+    }
+}
 
 pub type Result<T> = std::result::Result<T, MilenaError>;

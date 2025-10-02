@@ -167,7 +167,7 @@ pub fn create_cmd() -> Command<'static> {
         .help("Follow the topic")
         .short('f')
         .long(ARG_FOLLOW)
-        .conflicts_with(ARG_COUNT);
+        .conflicts_with(ARG_JSON_BATCH);
 
     let arg_tail = Arg::with_name(ARG_TAIL)
         .help("Read from the end")

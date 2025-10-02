@@ -13,18 +13,7 @@ use crate::config::{
 };
 use crate::error::{MilenaError, Result};
 use crate::MilenaError::{ArgError, GenericError, KafkaError};
-use std::borrow::Cow;
-use std::cmp::{max, PartialEq};
-use std::collections::{HashMap, HashSet};
-use std::time::Duration;
-use std::{env, io};
-
-use std::fs::{read, read_to_string, File};
-use std::io::{BufWriter, Cursor, Read};
-use std::path::Path;
-
 use byteorder::{BigEndian, ReadBytesExt};
-
 use chrono::{DateTime, Utc};
 use clap::{ArgMatches, Command};
 use clap_complete::{generate, Shell};
@@ -38,7 +27,7 @@ use rdkafka::admin::{
 };
 use rdkafka::client::{Client, DefaultClientContext};
 use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer};
-use rdkafka::error::KafkaResult;
+use rdkafka::error::{KafkaResult, RDKafkaErrorCode};
 use rdkafka::message::Timestamp::CreateTime;
 use rdkafka::message::{
     BorrowedHeaders, BorrowedMessage, DeliveryResult, Headers, Message, OwnedHeaders,
@@ -51,13 +40,20 @@ use rdkafka::util::Timeout;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-
+use std::borrow::Cow;
+use std::cmp::{max, PartialEq};
+use std::collections::{HashMap, HashSet};
+use std::fs::{read, read_to_string, File};
+use std::io::{BufWriter, Cursor, Read, Write};
+use std::path::Path;
+use std::time::Duration;
+use std::{env, io};
 
 mod args;
 mod config;
 mod error;
-mod resolve;
 mod utils;
+mod resolve;
 
 const DEFAULT_GROUP_ID: &str = "milena";
 
@@ -1050,7 +1046,6 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
     let follow = config.follow;
     let mut current_count = 0;
     let topic_partition = get_topic_partitions(&consumer, &config)?;
-    let mut messages = Vec::<ConsumedMessage>::new();
     let mut output_file: Box<dyn std::io::Write> = if let Some(ref output_file) = config.output_file {
         let path = Path::new(output_file);
 
@@ -1072,12 +1067,19 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
 
     let timeout = match follow {
         true => None,
-        false => Some(Duration::new(1, 0)),
+        false => Some(config.base.timeout),
     };
 
     if config.tail.is_some() {
         count = config.tail.unwrap() as usize;
     }
+
+    if json_batch {
+        write!(output_file, "[")?;
+    }
+
+    let mut first = true;
+    let mut retries = 0;
 
     loop {
         if count > 0 && count == current_count && !follow {
@@ -1086,7 +1088,19 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
 
         match consumer.poll(timeout) {
             Some(result) => {
-                let opt_message = handle_fetch_result(&config, &result)?;
+                let opt_message = match result {
+                    Ok(_) => {
+                        retries = 0;
+                        handle_fetch_result(&config, &result)?
+                    }
+                    Err(rdkafka::error::KafkaError::MessageConsumption(RDKafkaErrorCode::BrokerTransportFailure) |
+                        rdkafka::error::KafkaError::MessageConsumption(RDKafkaErrorCode::AllBrokersDown)) if retries < 5 => {
+                        retries += 1;
+
+                        continue;
+                    }
+                    Err(err) => return Err(MilenaError::from(err))
+                };
 
                 if opt_message.is_none() {
                     continue;
@@ -1095,27 +1109,27 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
                 let message = opt_message.unwrap();
 
                 if json_batch {
-                    let key = message.key.map(|s| Cow::from(Cow::into_owned(s)));
-                    let payload = message.payload.map(|s| Cow::from(Cow::into_owned(s)));
+                    if !first {
+                        write!(output_file, ",")?;
+                    }
 
-                    messages.push(ConsumedMessage::new(
-                        message.timestamp,
-                        key,
-                        payload,
-                        message.headers,
-                    ));
+                    first = false;
+
+                    write!(output_file, "{}", serde_json::to_string(&message)?)?;
                 } else {
                     writeln!(output_file, "{}", json!(message))?;
                 }
             }
-            None => break,
+            None => {}
         }
+
+        output_file.flush()?;
 
         current_count += 1;
     }
 
     if json_batch {
-        writeln!(output_file, "{}", json!(messages))?;
+        writeln!(output_file, "]")?;
     }
 
     Ok(())
@@ -1189,11 +1203,7 @@ fn get_topic_partitions(
     Ok(topic_partition)
 }
 
-fn get_all_partitions(
-    consumer: &BaseConsumer,
-    config: &ConsumeConfig,
-    topic: &String,
-) -> Result<Vec<i32>> {
+fn get_all_partitions(consumer: &BaseConsumer, config: &ConsumeConfig, topic: &String) -> Result<Vec<i32>> {
     let metadata = consumer
         .fetch_metadata(Some(topic), config.base.timeout)
         .map_err(MilenaError::from)?;
@@ -1224,8 +1234,6 @@ fn handle_fetch_result<'a>(
     config: &ConsumeConfig,
     result: &'a KafkaResult<BorrowedMessage>,
 ) -> Result<Option<ConsumedMessage<'a>>> {
-    result.as_ref().map_err(MilenaError::from)?;
-
     let message = result.as_ref()?;
     let headers = match config.no_headers {
         true => None,
