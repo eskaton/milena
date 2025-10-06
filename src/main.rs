@@ -1179,13 +1179,18 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
                 } else {
                     writeln!(output_file, "{}", json!(message))?;
                 }
+
+
+                output_file.flush()?;
+
+                current_count += 1;
             }
-            None => {}
+            None => {
+                if !follow {
+                    break
+                }
+            }
         }
-
-        output_file.flush()?;
-
-        current_count += 1;
     }
 
     if json_batch {
