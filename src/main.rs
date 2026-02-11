@@ -1,6 +1,5 @@
 #[macro_use(crate_version, value_parser)]
 extern crate clap;
-extern crate core;
 
 use crate::args::create_cmd;
 use crate::args::{
@@ -27,7 +26,7 @@ use rdkafka::admin::{
 };
 use rdkafka::client::{Client, DefaultClientContext};
 use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer};
-use rdkafka::error::{KafkaResult, RDKafkaErrorCode};
+use rdkafka::error::{KafkaError as RdKafkaError, KafkaResult, RDKafkaErrorCode};
 use rdkafka::message::Timestamp::CreateTime;
 use rdkafka::message::{
     BorrowedHeaders, BorrowedMessage, DeliveryResult, Headers, Message, OwnedHeaders,
@@ -38,13 +37,15 @@ use rdkafka::topic_partition_list::Offset::{End, Offset};
 use rdkafka::types::RDKafkaType;
 use rdkafka::util::Timeout;
 use rdkafka::{ClientConfig, ClientContext, TopicPartitionList};
-use serde::{Deserialize, Serialize};
+use serde::de::{self, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use std::borrow::Cow;
 use std::cmp::{max, PartialEq};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::fs::{read, read_to_string, File};
-use std::io::{BufWriter, Cursor, Read, Write};
+use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::Path;
 use std::time::Duration;
 use std::{env, io};
@@ -362,22 +363,77 @@ struct KeyContext {}
 impl ClientContext for KeyContext {}
 
 impl ProducerContext for KeyContext {
-    type DeliveryOpaque = Box<Option<Vec<u8>>>;
+    type DeliveryOpaque = Box<(Option<Vec<u8>>, bool)>;
 
     fn delivery(&self, delivery_result: &DeliveryResult, delivery_opaque: Self::DeliveryOpaque) {
         match delivery_result {
-            Ok(_) => match delivery_opaque.as_ref() {
-                None => println!("Message successfully delivered"),
-                Some(key) => match String::from_utf8(key.to_vec()) {
-                    Ok(str_key) => println!(
-                        "Message with key '{}' successfully delivered",
-                        escape_newlines(&str_key)
-                    ),
-                    Err(_) => println!("Message with key '{:?}' successfully delivered", key),
-                },
+            Ok(_) => if delivery_opaque.1 {
+                match delivery_opaque.0.as_ref() {
+                    None => println!("Message successfully delivered"),
+                    Some(key) => match String::from_utf8(key.to_vec()) {
+                        Ok(str_key) => println!(
+                            "Message with key '{}' successfully delivered",
+                            escape_newlines(&str_key)
+                        ),
+                        Err(_) => println!("Message with key '{:?}' successfully delivered", key),
+                    },
+                }
             },
             Err(e) => eprintln!("{}", format!("Failed to deliver message: {:?}", e).red()),
         };
+    }
+}
+
+struct BatchVisitor<'a> {
+    config: &'a ProduceConfig,
+    producer: &'a BaseProducer<KeyContext>,
+    batch_size: usize,
+}
+
+impl<'de, 'a> Visitor<'de> for BatchVisitor<'a> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a JSON array of messages")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut count: usize = 0;
+
+        while let Some(message) = seq.next_element::<ConsumedMessage>()? {
+            let msg_payload = message.payload.as_ref().map(|s| s.as_bytes());
+            let msg_headers = message.headers.as_ref();
+            let msg_key = message.key.as_ref().map(|s| s.as_bytes());
+            let mut headers = OwnedHeaders::new();
+
+            if let Some(hs) = msg_headers {
+                for header in hs {
+                    headers = headers.insert(rdkafka::message::Header {
+                        key: header.key.as_str(),
+                        value: Some(header.value.as_str()),
+                    });
+                }
+            }
+
+            if let Err(e) = send_message(self.config, self.producer, msg_payload, msg_key, &headers) {
+                return Err(<A::Error as de::Error>::custom(<MilenaError as Into<String>>::into(e)));
+            }
+
+            count += 1;
+
+            if count % self.batch_size == 0 {
+                self.producer.poll(Duration::from_millis(0));
+            }
+        }
+
+        if let Err(e) = self.producer.flush(Timeout::After(Duration::new(30, 0))) {
+            return Err(<A::Error as de::Error>::custom(e.to_string()));
+        }
+
+        Ok(())
     }
 }
 
@@ -401,7 +457,7 @@ fn create_consumer(config: &BaseConfig, consumer_group: Option<String>) -> Resul
 }
 
 fn create_producer(config: &BaseConfig) -> Result<BaseProducer<KeyContext>> {
-    let client_config = create_client_config(config, ConfigType::Consumer);
+    let client_config = create_client_config(config, ConfigType::Producer);
     let client = client_config
         .create_with_context(KeyContext {})
         .map_err(MilenaError::from)?;
@@ -1175,13 +1231,11 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
 
                     first = false;
 
-                    write!(output_file, "{}", serde_json::to_string(&message)?)?;
+                    serde_json::to_writer(&mut output_file, &message)?;
                 } else {
-                    writeln!(output_file, "{}", json!(message))?;
+                    serde_json::to_writer(&mut output_file, &message)?;
+                    write!(output_file, "\n")?;
                 }
-
-
-                output_file.flush()?;
 
                 current_count += 1;
             }
@@ -1196,6 +1250,8 @@ fn cmd_consume(matches: &ArgMatches) -> Result<()> {
     if json_batch {
         writeln!(output_file, "]")?;
     }
+
+    output_file.flush()?;
 
     Ok(())
 }
@@ -1443,42 +1499,35 @@ fn get_header(borrowed_headers: &BorrowedHeaders, idx: usize) -> Option<Header> 
 fn cmd_produce(matches: &ArgMatches) -> Result<()> {
     let config = ProduceConfig::new(matches)?;
     let producer = create_producer(&config.base)?;
-    let payload = &config
-        .payload_file
-        .as_ref()
-        .map(|f| read_to_string(f).unwrap());
     let json_batch = config.json_batch;
     let batch_size = config.batch_size.unwrap_or(128);
 
-    if json_batch && payload.is_some() {
-        let messages: Vec<ConsumedMessage> =
-            serde_json::from_str(payload.as_ref().unwrap().as_str()).unwrap();
-        let mut count: usize = 0;
-
-        for message in messages.iter() {
-            let msg_payload = message.payload.as_ref().map(|s| s.to_string());
-            let msg_headers = message.headers.as_ref();
-            let msg_key = message.key.as_ref().map(|s| s.as_bytes().to_owned());
-            let mut headers = OwnedHeaders::new();
-
-            if msg_headers.is_some() {
-                for header in msg_headers.unwrap() {
-                    headers = headers.insert(rdkafka::message::Header {
-                        key: header.key.as_str(),
-                        value: Some(header.value.as_str()),
-                    });
-                }
+    if json_batch {
+        let payload_path = match &config.payload_file {
+            Some(path) => path,
+            None => {
+                return Err(GenericError(
+                    "JSON batch mode requires a payload file".to_string(),
+                ))
             }
+        };
 
-            send_message(&config, &producer, &msg_payload, &msg_key, &headers)?;
-
-            count += 1;
-
-            if count % batch_size == 0 {
-                producer.flush(Timeout::After(Duration::new(30, 0)))?;
-            }
-        }
+        let file = File::open(payload_path)?;
+        let reader = BufReader::new(file);
+        let mut deserializer = serde_json::Deserializer::from_reader(reader);
+        deserializer
+            .deserialize_seq(BatchVisitor {
+                config: &config,
+                producer: &producer,
+                batch_size,
+            })
+            .map_err(|e| GenericError(format!("Failed to process JSON batch: {}", e)))?;
     } else {
+        let payload_owned = config
+            .payload_file
+            .as_ref()
+            .map(|f| read_to_string(f).unwrap());
+        let payload = payload_owned.as_ref().map(|s| s.as_bytes());
         let mut headers = OwnedHeaders::new();
 
         for header in config.headers.iter() {
@@ -1488,8 +1537,10 @@ fn cmd_produce(matches: &ArgMatches) -> Result<()> {
             });
         }
 
-        let key = get_key(&config)?;
-        send_message(&config, &producer, payload, &key, &headers)?;
+        let key_owned = get_key(&config)?;
+        let key = key_owned.as_deref();
+
+        send_message(&config, &producer, payload, key, &headers)?;
     }
 
     producer.flush(Timeout::After(Duration::new(30, 0)))?;
@@ -1500,32 +1551,38 @@ fn cmd_produce(matches: &ArgMatches) -> Result<()> {
 fn send_message(
     config: &ProduceConfig,
     producer: &BaseProducer<KeyContext>,
-    payload: &Option<String>,
-    key: &Option<Vec<u8>>,
+    payload: Option<&[u8]>,
+    key: Option<&[u8]>,
     headers: &OwnedHeaders,
 ) -> Result<()> {
-    let delivery_opaque = Box::from(key.clone());
-    let mut record = BaseRecord::<Vec<u8>, String, Box<Option<Vec<u8>>>>::with_opaque_to(
-        &config.topic,
-        delivery_opaque,
-    )
+    let key_vec: Option<Vec<u8>> = key.map(|k| k.to_vec());
+    let delivery_opaque = Box::from((key_vec.clone(), config.verbose));
+    let mut record = BaseRecord::with_opaque_to(&config.topic, delivery_opaque)
         .headers(headers.clone());
 
-    if config.partition.is_some() {
-        record = record.partition(config.partition.unwrap());
+    if let Some(partition) = config.partition {
+        record = record.partition(partition);
     }
 
-    if key.is_some() {
-        record = record.key(key.as_ref().unwrap());
+    if let Some(key_bytes) = key {
+        record = record.key(key_bytes);
     }
 
-    if payload.is_some() {
-        record = record.payload(payload.as_ref().unwrap());
+    if let Some(p) = payload {
+        record = record.payload(p);
     };
 
-    producer
-        .send(record)
-        .map_err(|(e, _)| MilenaError::from(e))?;
+    loop {
+        match producer.send(record) {
+            Ok(()) => break,
+            Err((RdKafkaError::MessageProduction(RDKafkaErrorCode::QueueFull), returned_record)) => {
+                producer.poll(Duration::from_millis(10));
+                record = returned_record;
+                continue;
+            }
+            Err((e, _)) => return Err(MilenaError::from(e)),
+        }
+    }
 
     Ok(())
 }

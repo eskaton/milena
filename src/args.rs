@@ -58,6 +58,7 @@ pub const ARG_BATCH_SIZE: &str = "batch-size";
 pub const ARG_TIMEOUT: &str = "timeout";
 pub const ARG_INCLUDE_DEFAULTS: &str = "include-defaults";
 pub const ARG_WITH_ASSIGNMENTS: &str = "with-assignments";
+pub const ARG_VERBOSE: &str = "verbose";
 
 fn add_global_args(app: Command) -> Command {
     let arg_servers: Arg = Arg::with_name(ARG_BOOTSTRAP_SERVER)
@@ -332,6 +333,12 @@ pub fn create_cmd() -> Command<'static> {
         .help("Include assignments of topic partitions")
         .long(ARG_WITH_ASSIGNMENTS);
 
+    let arg_verbose = Arg::with_name(ARG_VERBOSE)
+        .short('v')
+        .long(ARG_VERBOSE)
+        .help("Increase verbosity");
+
+
     Command::new("milena")
         .version(crate_version!())
         .propagate_version(false)
@@ -473,7 +480,8 @@ pub fn create_cmd() -> Command<'static> {
                     .arg(&arg_key)
                     .arg(&arg_key_file)
                     .arg(&arg_payload_file)
-                    .arg(&arg_json_batch_producer),
+                    .arg(&arg_json_batch_producer)
+                    .arg(&arg_verbose),
             )
                 .arg(&arg_batch_size),
         )
