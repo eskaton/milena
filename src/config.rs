@@ -10,6 +10,10 @@ use clap::ArgMatches;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
+#[cfg(test)]
+use std::io::Cursor;
 use std::panic;
 use std::path::Path;
 use std::string::ToString;
@@ -260,11 +264,29 @@ impl BaseConfig {
                 return Err(GenericError(format!("File {} doesn't exist", path)));
             }
 
-            return Ok(Option::from(dotproperties::parse_from_file(path).unwrap()));
+            let properties = parse_properties(File::open(path)?).map_err(|error| {
+                GenericError(format!(
+                    "Failed to parse properties file {}: {}",
+                    path, error
+                ))
+            })?;
+
+            return Ok(Some(properties));
         }
 
         Ok(None)
     }
+}
+
+fn parse_properties<R: Read>(
+    reader: R,
+) -> std::result::Result<Vec<(String, String)>, java_properties::PropertiesError> {
+    let mut properties = java_properties::PropertiesIter::new(reader);
+    let mut entries = Vec::new();
+
+    properties.read_into(|key, value| entries.push((key, value)))?;
+
+    Ok(entries)
 }
 
 #[derive(PartialEq)]
@@ -766,4 +788,18 @@ fn test_split_name_value_pair() {
     assert!(split_name_value_pair("", "a=").is_err());
     assert!(split_name_value_pair("", "a").is_err());
     assert!(split_name_value_pair("", "").is_err());
+}
+
+#[test]
+fn test_parse_properties_preserves_entries() {
+    let input = Cursor::new(&b"# comment\nfirst=value\nsecond:other\nfirst=override\n"[..]);
+
+    assert_eq!(
+        parse_properties(input).unwrap(),
+        vec![
+            ("first".to_string(), "value".to_string()),
+            ("second".to_string(), "other".to_string()),
+            ("first".to_string(), "override".to_string()),
+        ]
+    );
 }

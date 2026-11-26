@@ -9,7 +9,6 @@ rdkafka = { version = "0.38.0", features = ["gssapi"] }
 clap = { version= "3.2.16", features = ["cargo"] }
 clap_complete = "3.2.3"
 serde_json = "1.0.128"
-dotproperties = "0.1.0"
 serde = { version = "1.0.219", features = ["derive"] }
 chrono = { version = "0.4.41", features = ["serde"] }
 num-integer = "0.1.46"
@@ -19,6 +18,7 @@ colorize = "0"
 lazy_static = "1.5.0"
 libc = "0.2.158"
 byteorder = "1.5.0"
+java-properties = "2.0.0"
 
 [profile.release]
 opt-level = 'z'
